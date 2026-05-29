@@ -25,7 +25,14 @@ window.HTYQ_STATE = (function() {
             factionRelations: [],
             rumors: [],
             reputation: { jianghu: '默默无闻', official: '默默无闻', folk: '默默无闻', underworld: '默默无闻' },
-            economy: { userGold: 1000, userAssets: [], marketTrend: '平稳', keyResources: [], fundsStatus: '勉强糊口', economyVisibility: { behavior: '', visible: false, witnesses: [], rumorGenerated: false } },
+            economy: { 
+                currencyName: null,        // 货币名称，如"金币"、"灵石"、"信用点"
+                currencyAmount: null,      // 玩家持有数量
+                marketTrend: '平稳', 
+                keyResources: [], 
+                fundsStatus: '尚未定义',    // 自然语言描述
+                economyVisibility: { behavior: '', visible: false, witnesses: [], rumorGenerated: false } 
+            },
             blackMarket: [],
             secretBox: { actions: [], assets: [] },
             accidentCooldown: 0,
@@ -98,8 +105,17 @@ window.HTYQ_STATE = (function() {
                 for (let key in defaults) {
                     if (worldState[key] === undefined) worldState[key] = defaults[key];
                 }
+                // 兼容旧数据：如果存在 userGold，迁移到新的货币结构
+                if (parsed.economy && typeof parsed.economy.userGold === 'number' && !parsed.economy.currencyName) {
+                    worldState.economy.currencyName = '金币';
+                    worldState.economy.currencyAmount = parsed.economy.userGold;
+                    worldState.economy.fundsStatus = '手头宽裕';
+                    delete worldState.economy.userGold;
+                }
+                if (!worldState.economy.currencyName) worldState.economy.currencyName = null;
+                if (worldState.economy.currencyAmount === undefined) worldState.economy.currencyAmount = null;
+                if (!worldState.economy.fundsStatus) worldState.economy.fundsStatus = '尚未定义';
                 if (!worldState.economy.economyVisibility) worldState.economy.economyVisibility = defaults.economy.economyVisibility;
-                if (!worldState.economy.fundsStatus) worldState.economy.fundsStatus = defaults.economy.fundsStatus;
                 if (!worldState.manualWorlds) worldState.manualWorlds = [];
                 // 兼容旧结构：如果旧数据是 content 格式，尝试转换为 entries
                 if (worldState.manualWorlds.length && worldState.manualWorlds[0].content && !worldState.manualWorlds[0].entries) {
