@@ -31,8 +31,8 @@ window.HTYQ_STATE = (function() {
             accidentCooldown: 0,
             noContactCounter: 0,
             breaker: 0,
-            autoBindCharacterWorld: true,
-            selectedWorlds: [],
+            // 世界书手动导入列表
+            manualWorlds: [],        // 格式： [{ name, content, enabled }]
             // 详细面板字段
             worldTime: '',
             overallAtmosphere: '',
@@ -102,6 +102,8 @@ window.HTYQ_STATE = (function() {
                 }
                 if (!worldState.economy.economyVisibility) worldState.economy.economyVisibility = defaults.economy.economyVisibility;
                 if (!worldState.economy.fundsStatus) worldState.economy.fundsStatus = defaults.economy.fundsStatus;
+                // 确保 manualWorlds 存在
+                if (!worldState.manualWorlds) worldState.manualWorlds = [];
             } catch(e) { worldState = getDefaultWorldState(); }
         } else {
             worldState = getDefaultWorldState();
@@ -136,8 +138,6 @@ window.HTYQ_STATE = (function() {
         if (worldState.chronicles.length > 100) worldState.chronicles.pop();
         saveWorldState();
     }
-
-    // 注意：showFloatingWarning 和 escapeHtml 已移至 HTYQ_UTILS，此处不再提供
 
     return {
         DEFAULT_DLCS,
