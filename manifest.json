@@ -1,0 +1,10 @@
+{
+  "display_name": "🌐 悬浮地球面板 + 活体引擎",
+  "author": "YourName",
+  "description": "可拖拽的地球悬浮球，点击打开活体世界引擎面板",
+  "version": "1.1.0",
+  "license": "MIT",
+  "type": "extension",
+  "js": "main.js",
+  "css": "style.css"
+}
