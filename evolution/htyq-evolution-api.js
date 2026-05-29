@@ -14,12 +14,13 @@ window.HTYQ_EVOLUTION_API = (function() {
     let currentRetry = 0;
     let floatingToast = null;
 
+    // 提示框位置改为右上角（top: 20px），避免遮挡手机端输入框
     function showPersistentToast(text, isError = false, duration = null) {
         if (floatingToast && floatingToast.parentNode) floatingToast.remove();
         floatingToast = document.createElement('div');
         floatingToast.style.cssText = `
             position: fixed;
-            bottom: 20px;
+            top: 20px;
             right: 20px;
             background: ${isError ? '#dc2626' : '#1f2937'};
             color: white;
