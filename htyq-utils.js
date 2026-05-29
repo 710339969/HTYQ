@@ -1,4 +1,4 @@
-// 公共工具模块 - 供所有其他模块调用
+// 公共工具模块 - 增强版（修复世界书列表获取）
 window.HTYQ_UTILS = (function() {
     // HTML 转义
     function escapeHtml(str) {
@@ -69,11 +69,56 @@ window.HTYQ_UTILS = (function() {
         } catch(e) { console.warn(e); }
     }
 
-    // 获取所有世界书（用于UI设置）
+    // 获取 SillyTavern 的认证请求头（复用酒馆的 authFetch 逻辑）
+    function getAuthHeaders() {
+        try {
+            // 优先使用全局函数
+            if (typeof getRequestHeaders === 'function') return getRequestHeaders();
+            // 尝试从 SillyTavern 上下文获取
+            const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : null;
+            if (ctx && typeof ctx.getRequestHeaders === 'function') return ctx.getRequestHeaders();
+            // 默认 JSON 头
+            return { 'Content-Type': 'application/json' };
+        } catch(e) {
+            return { 'Content-Type': 'application/json' };
+        }
+    }
+
+    // 带认证的 fetch 封装
+    async function authFetch(url, options = {}) {
+        const headers = getAuthHeaders();
+        // 如果 body 是 FormData，删除 Content-Type 让浏览器自动设置
+        if (options.body && (options.body instanceof FormData || options.body.constructor?.name === 'FormData')) {
+            delete headers['Content-Type'];
+        }
+        options.headers = Object.assign({}, headers, options.headers || {});
+        options.credentials = 'same-origin';
+        const fetchFn = (window.parent && window.parent.fetch) || window.fetch;
+        return fetchFn.call(window.parent || window, url, options);
+    }
+
+    // 获取所有世界书名称（修复版）
     async function getAllWorlds() {
         try {
-            const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : getContext();
-            if (ctx.worldInfoManager) {
+            // 方法1：直接读取酒馆全局变量 world_names（最可靠）
+            if (window.parent && window.parent.world_names && Array.isArray(window.parent.world_names)) {
+                return [...window.parent.world_names];
+            }
+            if (window.world_names && Array.isArray(window.world_names)) {
+                return [...window.world_names];
+            }
+
+            // 方法2：通过后端 API 获取世界书列表
+            const res = await authFetch('/api/worldinfo/all', { method: 'GET' });
+            if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data)) return data.map(w => typeof w === 'string' ? w : w.name);
+                if (data && Array.isArray(data.worlds)) return data.worlds;
+            }
+
+            // 方法3：从 SillyTavern 上下文 worldInfoManager 获取
+            const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : null;
+            if (ctx && ctx.worldInfoManager) {
                 if (typeof ctx.worldInfoManager.getWorlds === 'function') {
                     const worlds = await ctx.worldInfoManager.getWorlds();
                     if (worlds && worlds.length) return worlds.map(w => w.name || w);
@@ -84,13 +129,21 @@ window.HTYQ_UTILS = (function() {
                     if (Array.isArray(worlds)) return worlds.map(w => w.name || w);
                 }
             }
-            if (ctx.worldInfo && ctx.worldInfo.entries) {
-                const worlds = new Set();
-                ctx.worldInfo.entries.forEach(entry => { if (entry.world) worlds.add(entry.world); });
-                return Array.from(worlds);
+
+            // 方法4：从 ctx.worldInfo.entries 中提取世界书名称（旧版兼容）
+            if (ctx && ctx.worldInfo && ctx.worldInfo.entries) {
+                const worldsSet = new Set();
+                ctx.worldInfo.entries.forEach(entry => {
+                    if (entry.world) worldsSet.add(entry.world);
+                });
+                return Array.from(worldsSet);
             }
+
             return [];
-        } catch(e) { return []; }
+        } catch(e) {
+            console.error('[HTYQ] 获取世界书列表失败', e);
+            return [];
+        }
     }
 
     return {
@@ -98,6 +151,7 @@ window.HTYQ_UTILS = (function() {
         showFloatingWarning,
         triggerEnvironmentVFX,
         insertActiveContactMessage,
-        getAllWorlds
+        getAllWorlds,
+        authFetch   // 导出供其他模块使用
     };
 })();
