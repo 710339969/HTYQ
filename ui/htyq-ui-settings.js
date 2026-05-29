@@ -1,4 +1,4 @@
-// 设置页面渲染模块 - 完整版，包含API、引擎、DLC、数据管理、世界书条目级编辑器
+// 设置页面渲染模块 - 完整修复版：测试按钮、条目下拉正常
 window.HTYQ_UI_SETTINGS = (function() {
     const STATE = window.HTYQ_STATE;
     const utils = window.HTYQ_UTILS;
@@ -32,7 +32,7 @@ window.HTYQ_UI_SETTINGS = (function() {
             return entries.filter(e => e.content || e.title);
         }
 
-        // 渲染世界书列表（卡片形式，显示条目数）
+        // 渲染世界书列表（卡片形式，显示条目数，带测试按钮）
         function renderWorldList() {
             const listDiv = container.querySelector('#htyq-worlds-list');
             if (!listDiv) return;
@@ -48,7 +48,10 @@ window.HTYQ_UI_SETTINGS = (function() {
                             <input type="checkbox" class="htyq-world-enable" data-index="${idx}" ${world.enabled !== false ? 'checked' : ''}>
                             <strong>${escapeHtml(world.name)}</strong>
                         </label>
-                        <button class="htyq-del-world" data-index="${idx}" style="background:#ef4444; border:none; color:white; border-radius:4px; padding:4px 10px; cursor:pointer;">删除世界书</button>
+                        <div>
+                            <button class="htyq-test-world-btn" data-index="${idx}" style="background:#8b5cf6; border:none; color:white; border-radius:4px; padding:4px 10px; margin-right:6px; cursor:pointer;">🔍 测试</button>
+                            <button class="htyq-del-world-btn" data-index="${idx}" style="background:#ef4444; border:none; color:white; border-radius:4px; padding:4px 10px; cursor:pointer;">删除世界书</button>
+                        </div>
                     </div>
                     <div style="font-size:12px; color:#94a3b8; margin-top:6px;">📄 条目数：${world.entries.length}</div>
                 </div>
@@ -62,11 +65,29 @@ window.HTYQ_UI_SETTINGS = (function() {
                         worldState.manualWorlds[idx].enabled = cb.checked;
                         STATE.saveWorldState();
                         utils.showFloatingWarning(`已${cb.checked ? '启用' : '禁用'}「${worldState.manualWorlds[idx].name}」`, false);
+                        // 刷新世界书下拉框（如果当前编辑的是这个）
+                        populateWorldSelect(document.getElementById('htyq-edit-world-select')?.value);
+                    }
+                });
+            });
+            // 测试按钮
+            listDiv.querySelectorAll('.htyq-test-world-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = parseInt(btn.dataset.index);
+                    const world = worldState.manualWorlds[idx];
+                    if (world) {
+                        let preview = `📖 世界书：${world.name}\n\n条目列表：\n`;
+                        world.entries.forEach((e, i) => {
+                            preview += `${i+1}. ${e.title} (${e.content.length}字符)\n`;
+                            if (i < 2) preview += `   内容预览：${e.content.substring(0, 100)}...\n`;
+                        });
+                        preview += `\n总条目数：${world.entries.length}`;
+                        alert(preview);
                     }
                 });
             });
             // 删除世界书
-            listDiv.querySelectorAll('.htyq-del-world').forEach(btn => {
+            listDiv.querySelectorAll('.htyq-del-world-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const idx = parseInt(btn.dataset.index);
                     if (!isNaN(idx) && confirm('确定删除这个世界书及其所有条目吗？')) {
@@ -74,9 +95,9 @@ window.HTYQ_UI_SETTINGS = (function() {
                         worldState.manualWorlds.splice(idx, 1);
                         renderWorldList();
                         // 清空编辑器选择
-                        const worldSelect = container.querySelector('#htyq-edit-world-select');
-                        if (worldSelect) worldSelect.innerHTML = '<option value="">-- 请选择世界书 --</option>';
-                        const entrySelect = container.querySelector('#htyq-edit-entry-select');
+                        const worldSelect = document.getElementById('htyq-edit-world-select');
+                        if (worldSelect) populateWorldSelect(worldSelect.value);
+                        const entrySelect = document.getElementById('htyq-edit-entry-select');
                         if (entrySelect) entrySelect.innerHTML = '<option value="">-- 请先选择世界书 --</option>';
                         document.getElementById('htyq-entry-content').value = '';
                         STATE.saveWorldState();
@@ -88,18 +109,26 @@ window.HTYQ_UI_SETTINGS = (function() {
 
         // 填充世界书下拉框
         function populateWorldSelect(selectedName) {
-            const worldSelect = container.querySelector('#htyq-edit-world-select');
+            const worldSelect = document.getElementById('htyq-edit-world-select');
             if (!worldSelect) return;
             let options = '<option value="">-- 请选择世界书 --</option>';
             for (const world of worldState.manualWorlds) {
                 options += `<option value="${escapeHtml(world.name)}" ${world.name === selectedName ? 'selected' : ''}>${escapeHtml(world.name)} (${world.entries.length}条目)</option>`;
             }
             worldSelect.innerHTML = options;
+            // 触发 change 事件以填充条目下拉
+            if (selectedName) {
+                populateEntrySelect(selectedName);
+            } else {
+                const entrySelect = document.getElementById('htyq-edit-entry-select');
+                if (entrySelect) entrySelect.innerHTML = '<option value="">-- 请先选择世界书 --</option>';
+                document.getElementById('htyq-entry-content').value = '';
+            }
         }
 
         // 根据世界书名称填充条目下拉框
-        function populateEntrySelect(worldName, selectedTitle) {
-            const entrySelect = container.querySelector('#htyq-edit-entry-select');
+        function populateEntrySelect(worldName) {
+            const entrySelect = document.getElementById('htyq-edit-entry-select');
             if (!entrySelect) return;
             const world = worldState.manualWorlds.find(w => w.name === worldName);
             if (!world) {
@@ -110,14 +139,24 @@ window.HTYQ_UI_SETTINGS = (function() {
             let options = '<option value="">-- 请选择条目 --</option>';
             for (let i = 0; i < world.entries.length; i++) {
                 const entry = world.entries[i];
-                const selectedAttr = entry.title === selectedTitle ? 'selected' : '';
-                options += `<option value="${i}" ${selectedAttr}>${escapeHtml(entry.title)}</option>`;
+                options += `<option value="${i}">${escapeHtml(entry.title)}</option>`;
             }
             entrySelect.innerHTML = options;
-            // 如果有选中条目，显示内容
-            if (selectedTitle) {
-                const entry = world.entries.find(e => e.title === selectedTitle);
-                if (entry) document.getElementById('htyq-entry-content').value = entry.content;
+            // 清空内容区
+            document.getElementById('htyq-entry-content').value = '';
+        }
+
+        // 显示选中条目的内容
+        function showSelectedEntryContent() {
+            const worldName = document.getElementById('htyq-edit-world-select')?.value;
+            const entryIndex = document.getElementById('htyq-edit-entry-select')?.value;
+            if (!worldName || entryIndex === "") {
+                document.getElementById('htyq-entry-content').value = '';
+                return;
+            }
+            const world = worldState.manualWorlds.find(w => w.name === worldName);
+            if (world && world.entries[entryIndex]) {
+                document.getElementById('htyq-entry-content').value = world.entries[entryIndex].content;
             } else {
                 document.getElementById('htyq-entry-content').value = '';
             }
@@ -182,7 +221,8 @@ window.HTYQ_UI_SETTINGS = (function() {
                     💡 提示：<br>
                     - 上传 JSON 文件时，如果文件是 SillyTavern 世界书格式（数组，每个元素含 name/comment 和 content），会自动解析为条目。<br>
                     - 上传 TXT 文件时，会按 "### 标题" 格式自动拆分条目，否则作为单个条目。<br>
-                    - 勾选「启用」后，该世界书的所有条目才会在推演时被 AI 读取。
+                    - 勾选「启用」后，该世界书的所有条目才会在推演时被 AI 读取。<br>
+                    - 点击「测试」按钮可预览世界书所有条目标题和内容摘要。
                 </div>
             </div>
 
@@ -360,37 +400,29 @@ window.HTYQ_UI_SETTINGS = (function() {
         }
 
         // ========== 世界书相关事件 ==========
-        const worldSelect = container.querySelector('#htyq-edit-world-select');
-        const entrySelect = container.querySelector('#htyq-edit-entry-select');
-        const entryContent = container.querySelector('#htyq-entry-content');
+        const worldSelect = document.getElementById('htyq-edit-world-select');
+        const entrySelect = document.getElementById('htyq-edit-entry-select');
 
         function onWorldChange() {
             const selectedWorld = worldSelect.value;
             if (selectedWorld) {
-                populateEntrySelect(selectedWorld, null);
+                populateEntrySelect(selectedWorld);
             } else {
                 entrySelect.innerHTML = '<option value="">-- 请先选择世界书 --</option>';
-                entryContent.value = '';
+                document.getElementById('htyq-entry-content').value = '';
             }
         }
 
         function onEntryChange() {
-            const selectedWorld = worldSelect.value;
-            const selectedEntryIndex = entrySelect.value;
-            if (selectedWorld && selectedEntryIndex !== "") {
-                const world = worldState.manualWorlds.find(w => w.name === selectedWorld);
-                if (world && world.entries[selectedEntryIndex]) {
-                    entryContent.value = world.entries[selectedEntryIndex].content;
-                } else {
-                    entryContent.value = '';
-                }
-            } else {
-                entryContent.value = '';
-            }
+            showSelectedEntryContent();
         }
 
-        if (worldSelect) worldSelect.addEventListener('change', onWorldChange);
-        if (entrySelect) entrySelect.addEventListener('change', onEntryChange);
+        if (worldSelect) {
+            worldSelect.addEventListener('change', onWorldChange);
+        }
+        if (entrySelect) {
+            entrySelect.addEventListener('change', onEntryChange);
+        }
 
         // 保存当前条目修改
         const updateEntryBtn = container.querySelector('#htyq-update-entry');
@@ -404,10 +436,13 @@ window.HTYQ_UI_SETTINGS = (function() {
                 }
                 const world = worldState.manualWorlds.find(w => w.name === selectedWorld);
                 if (world && world.entries[selectedEntryIndex]) {
-                    world.entries[selectedEntryIndex].content = entryContent.value;
+                    world.entries[selectedEntryIndex].content = document.getElementById('htyq-entry-content').value;
                     STATE.saveWorldState();
                     renderWorldList();
-                    populateEntrySelect(selectedWorld, world.entries[selectedEntryIndex].title);
+                    // 刷新条目下拉（保持选中）
+                    populateEntrySelect(selectedWorld);
+                    entrySelect.value = selectedEntryIndex;
+                    showSelectedEntryContent();
                     utils.showFloatingWarning(`已更新条目「${world.entries[selectedEntryIndex].title}」`, false);
                 } else {
                     utils.showFloatingWarning('世界书或条目不存在', true);
@@ -432,7 +467,11 @@ window.HTYQ_UI_SETTINGS = (function() {
                     STATE.saveWorldState();
                     renderWorldList();
                     populateWorldSelect(selectedWorld);
-                    populateEntrySelect(selectedWorld, newTitle);
+                    populateEntrySelect(selectedWorld);
+                    // 自动选中新条目
+                    const newIndex = world.entries.length - 1;
+                    entrySelect.value = newIndex;
+                    showSelectedEntryContent();
                     utils.showFloatingWarning(`已添加条目「${newTitle}」`, false);
                 }
             });
@@ -457,10 +496,12 @@ window.HTYQ_UI_SETTINGS = (function() {
                         renderWorldList();
                         populateWorldSelect(selectedWorld);
                         if (world.entries.length) {
-                            populateEntrySelect(selectedWorld, world.entries[0].title);
+                            populateEntrySelect(selectedWorld);
+                            entrySelect.value = 0;
+                            showSelectedEntryContent();
                         } else {
                             entrySelect.innerHTML = '<option value="">-- 无条目 --</option>';
-                            entryContent.value = '';
+                            document.getElementById('htyq-entry-content').value = '';
                         }
                         utils.showFloatingWarning(`已删除条目「${title}」`, false);
                     }
