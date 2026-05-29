@@ -65,73 +65,41 @@ window.HTYQ_UTILS = (function() {
         } catch(e) { console.warn(e); }
     }
 
-    // ==================== 修复后的世界书读取函数 ====================
-    
-    // 获取所有世界书名称列表（兼容SillyTavern 1.12+）
+    // 获取所有世界书名称（保留，但不再强制依赖）
     async function getAllWorlds() {
         try {
-            // 方法1：官方全局函数 getWorldbookNames（最优先）
             if (typeof getWorldbookNames === 'function') {
                 const names = await getWorldbookNames();
-                if (names && Array.isArray(names) && names.length) {
-                    console.log('[HTYQ] 通过 getWorldbookNames 获取世界书:', names);
-                    return names;
-                }
+                if (names && Array.isArray(names) && names.length) return names;
             }
-
-            // 方法2：通过 context.worldInfoManager
             const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) 
                         ? SillyTavern.getContext() 
                         : (typeof getContext === 'function' ? getContext() : null);
-            
             if (ctx && ctx.worldInfoManager) {
-                // 2.1 getWorldNames
                 if (typeof ctx.worldInfoManager.getWorldNames === 'function') {
                     const names = await ctx.worldInfoManager.getWorldNames();
-                    if (names && names.length) {
-                        console.log('[HTYQ] worldInfoManager.getWorldNames 获取世界书:', names);
-                        return names;
-                    }
+                    if (names && names.length) return names;
                 }
-                // 2.2 getWorlds（返回对象数组）
                 if (typeof ctx.worldInfoManager.getWorlds === 'function') {
                     const worlds = await ctx.worldInfoManager.getWorlds();
-                    if (worlds && worlds.length) {
-                        const names = worlds.map(w => typeof w === 'string' ? w : (w.name || w.title || w.id));
-                        console.log('[HTYQ] worldInfoManager.getWorlds 获取世界书:', names);
-                        return names;
-                    }
+                    if (worlds && worlds.length) return worlds.map(w => typeof w === 'string' ? w : (w.name || w.title || w.id));
                 }
             }
-
-            // 方法3：降级 - 尝试全局变量（旧版本兼容）
-            if (window.world_names && Array.isArray(window.world_names) && window.world_names.length) {
-                console.log('[HTYQ] window.world_names 获取世界书:', window.world_names);
-                return [...window.world_names];
-            }
-            if (window.parent && window.parent.world_names && Array.isArray(window.parent.world_names)) {
-                console.log('[HTYQ] parent.world_names 获取世界书:', window.parent.world_names);
-                return [...window.parent.world_names];
-            }
-
-            console.warn('[HTYQ] 所有方法均未能获取世界书列表');
             return [];
-        } catch (err) {
-            console.error('[HTYQ] getAllWorlds 错误', err);
+        } catch(e) {
+            console.error('[HTYQ] getAllWorlds 错误', e);
             return [];
         }
     }
 
-    // 获取指定世界书的内容（兼容SillyTavern 1.12+）
+    // 获取指定世界书的内容
     async function getWorldContent(worldName) {
         if (!worldName || typeof worldName !== 'string') return '';
         const name = worldName.trim();
         if (!name) return '';
 
         try {
-            // 方法1：官方全局函数 getWorldbook
             if (typeof getWorldbook === 'function') {
-                console.log(`[HTYQ] 使用 getWorldbook("${name}")`);
                 const entries = await getWorldbook(name);
                 if (entries && Array.isArray(entries) && entries.length) {
                     return entries.map(entry => {
@@ -140,13 +108,8 @@ window.HTYQ_UTILS = (function() {
                         return `【${title}】${content}`;
                     }).join('\n');
                 }
-                if (entries && entries.length === 0) {
-                    console.warn(`[HTYQ] 世界书 "${name}" 存在但无条目`);
-                }
                 return '';
             }
-
-            // 方法2：通过 worldInfoManager
             const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) 
                         ? SillyTavern.getContext() 
                         : (typeof getContext === 'function' ? getContext() : null);
@@ -163,12 +126,21 @@ window.HTYQ_UTILS = (function() {
                     }
                 }
             }
-
             console.warn(`[HTYQ] 无法读取世界书 "${name}" 的内容`);
             return '';
-        } catch (err) {
-            console.error(`[HTYQ] getWorldContent("${name}") 错误`, err);
+        } catch(e) {
+            console.error(`[HTYQ] getWorldContent("${name}") 错误`, e);
             return '';
+        }
+    }
+
+    // 新增：测试世界书是否可读（供UI调用）
+    async function testWorldReadable(worldName) {
+        const content = await getWorldContent(worldName);
+        if (content && content.length > 0) {
+            return { success: true, preview: content.substring(0, 200) };
+        } else {
+            return { success: false, error: '无内容或读取失败' };
         }
     }
 
@@ -178,6 +150,7 @@ window.HTYQ_UTILS = (function() {
         triggerEnvironmentVFX,
         insertActiveContactMessage,
         getAllWorlds,
-        getWorldContent
+        getWorldContent,
+        testWorldReadable
     };
 })();
