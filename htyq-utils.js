@@ -1,4 +1,4 @@
-// 公共工具模块 - 增强版（修复世界书列表获取）
+// 公共工具模块 - 修复版（只使用酒馆原生 API，不调用 /api/worldinfo/all）
 window.HTYQ_UTILS = (function() {
     // HTML 转义
     function escapeHtml(str) {
@@ -69,25 +69,21 @@ window.HTYQ_UTILS = (function() {
         } catch(e) { console.warn(e); }
     }
 
-    // 获取 SillyTavern 的认证请求头（复用酒馆的 authFetch 逻辑）
+    // 获取 SillyTavern 的认证请求头
     function getAuthHeaders() {
         try {
-            // 优先使用全局函数
             if (typeof getRequestHeaders === 'function') return getRequestHeaders();
-            // 尝试从 SillyTavern 上下文获取
             const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : null;
             if (ctx && typeof ctx.getRequestHeaders === 'function') return ctx.getRequestHeaders();
-            // 默认 JSON 头
             return { 'Content-Type': 'application/json' };
         } catch(e) {
             return { 'Content-Type': 'application/json' };
         }
     }
 
-    // 带认证的 fetch 封装
+    // 带认证的 fetch
     async function authFetch(url, options = {}) {
         const headers = getAuthHeaders();
-        // 如果 body 是 FormData，删除 Content-Type 让浏览器自动设置
         if (options.body && (options.body instanceof FormData || options.body.constructor?.name === 'FormData')) {
             delete headers['Content-Type'];
         }
@@ -97,7 +93,7 @@ window.HTYQ_UTILS = (function() {
         return fetchFn.call(window.parent || window, url, options);
     }
 
-    // 获取所有世界书名称（修复版）
+    // 获取所有世界书名称 - 只使用酒馆原生数据，不调用不存在的 API
     async function getAllWorlds() {
         try {
             // 方法1：直接读取酒馆全局变量 world_names（最可靠）
@@ -108,21 +104,15 @@ window.HTYQ_UTILS = (function() {
                 return [...window.world_names];
             }
 
-            // 方法2：通过后端 API 获取世界书列表
-            const res = await authFetch('/api/worldinfo/all', { method: 'GET' });
-            if (res.ok) {
-                const data = await res.json();
-                if (Array.isArray(data)) return data.map(w => typeof w === 'string' ? w : w.name);
-                if (data && Array.isArray(data.worlds)) return data.worlds;
-            }
-
-            // 方法3：从 SillyTavern 上下文 worldInfoManager 获取
+            // 方法2：从 SillyTavern 上下文 worldInfoManager 获取
             const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : null;
             if (ctx && ctx.worldInfoManager) {
+                // 2.1 如果存在 getWorlds 方法
                 if (typeof ctx.worldInfoManager.getWorlds === 'function') {
                     const worlds = await ctx.worldInfoManager.getWorlds();
                     if (worlds && worlds.length) return worlds.map(w => w.name || w);
                 }
+                // 2.2 直接读取 worlds 对象
                 if (ctx.worldInfoManager.worlds) {
                     const worlds = ctx.worldInfoManager.worlds;
                     if (typeof worlds === 'object') return Object.keys(worlds);
@@ -130,7 +120,7 @@ window.HTYQ_UTILS = (function() {
                 }
             }
 
-            // 方法4：从 ctx.worldInfo.entries 中提取世界书名称（旧版兼容）
+            // 方法3：从 ctx.worldInfo.entries 中提取（旧版兼容）
             if (ctx && ctx.worldInfo && ctx.worldInfo.entries) {
                 const worldsSet = new Set();
                 ctx.worldInfo.entries.forEach(entry => {
@@ -139,6 +129,7 @@ window.HTYQ_UTILS = (function() {
                 return Array.from(worldsSet);
             }
 
+            console.warn('[HTYQ] 无法获取世界书列表，请确保已创建世界书');
             return [];
         } catch(e) {
             console.error('[HTYQ] 获取世界书列表失败', e);
@@ -152,6 +143,6 @@ window.HTYQ_UTILS = (function() {
         triggerEnvironmentVFX,
         insertActiveContactMessage,
         getAllWorlds,
-        authFetch   // 导出供其他模块使用
+        authFetch
     };
 })();
