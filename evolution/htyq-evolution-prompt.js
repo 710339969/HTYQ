@@ -4,7 +4,6 @@ window.HTYQ_EVOLUTION_PROMPT = (function() {
     const RULES = window.HTYQ_RULES;
     const utils = window.HTYQ_UTILS;
 
-    // 获取角色卡信息
     async function getCharacterCardInfo() {
         try {
             const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : getContext();
@@ -26,7 +25,6 @@ window.HTYQ_EVOLUTION_PROMPT = (function() {
         }
     }
 
-    // 批量获取多个世界书的内容
     async function getWorldContentByNames(worldNames) {
         if (!worldNames || !worldNames.length) return '';
         let combined = '';
@@ -39,7 +37,6 @@ window.HTYQ_EVOLUTION_PROMPT = (function() {
         return combined;
     }
 
-    // 构建完整的推演 Prompt
     async function buildEvolutionPrompt() {
         const rules = RULES.getFullSystemRules(STATE.globalApiSettings.enabledDlcs);
         let worldContext = '';
@@ -49,7 +46,6 @@ window.HTYQ_EVOLUTION_PROMPT = (function() {
         let worldContent = '';
 
         if (ws.autoBindCharacterWorld) {
-            // 自动从角色卡绑定的世界书读取
             try {
                 const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : getContext();
                 const charId = ctx.characterId;
