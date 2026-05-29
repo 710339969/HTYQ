@@ -1,6 +1,6 @@
-// 公共工具模块 - 修复版（优先使用 parent.world_names）
+// 公共工具模块 - 稳定版（基于 SillyTavern 官方 worldInfoManager）
 window.HTYQ_UTILS = (function() {
-    // HTML 转义
+    // ========== 基础辅助 ==========
     function escapeHtml(str) {
         if (!str) return '';
         return String(str).replace(/[&<>]/g, function(m) {
@@ -11,7 +11,6 @@ window.HTYQ_UTILS = (function() {
         });
     }
 
-    // 浮动警告提示
     function showFloatingWarning(message, isRed = true) {
         let warnDiv = document.getElementById('htyq-float-warning');
         if (!warnDiv) {
@@ -46,7 +45,6 @@ window.HTYQ_UTILS = (function() {
         }, 5000);
     }
 
-    // 环境特效：震动/红闪
     function triggerEnvironmentVFX(level) {
         if (level === '重度') {
             document.body.classList.add('htyq-shake-trigger', 'htyq-flash-red-trigger');
@@ -57,7 +55,6 @@ window.HTYQ_UTILS = (function() {
         }
     }
 
-    // 插入主动接触消息到聊天
     async function insertActiveContactMessage(contactDesc) {
         try {
             const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : getContext();
@@ -69,79 +66,179 @@ window.HTYQ_UTILS = (function() {
         } catch(e) { console.warn(e); }
     }
 
-    // 获取 SillyTavern 的认证请求头
-    function getAuthHeaders() {
+    // ========== 获取 SillyTavern 上下文（统一兼容层）==========
+    function getSTContext() {
         try {
-            if (typeof getRequestHeaders === 'function') return getRequestHeaders();
-            const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : null;
-            if (ctx && typeof ctx.getRequestHeaders === 'function') return ctx.getRequestHeaders();
-            return { 'Content-Type': 'application/json' };
-        } catch(e) {
-            return { 'Content-Type': 'application/json' };
+            if (typeof SillyTavern !== 'undefined' && typeof SillyTavern.getContext === 'function') {
+                return SillyTavern.getContext();
+            }
+            if (typeof getContext === 'function') {
+                return getContext();
+            }
+            console.warn('[HTYQ] 无法获取 SillyTavern Context');
+            return null;
+        } catch (err) {
+            console.error('[HTYQ] getSTContext 错误', err);
+            return null;
         }
     }
 
-    // 带认证的 fetch
-    async function authFetch(url, options = {}) {
-        const headers = getAuthHeaders();
-        if (options.body && (options.body instanceof FormData || options.body.constructor?.name === 'FormData')) {
-            delete headers['Content-Type'];
-        }
-        options.headers = Object.assign({}, headers, options.headers || {});
-        options.credentials = 'same-origin';
-        const fetchFn = (window.parent && window.parent.fetch) || window.fetch;
-        return fetchFn.call(window.parent || window, url, options);
-    }
-
-    // 获取所有世界书名称（修复版：优先使用 parent.world_names）
+    // ========== 获取所有世界书列表（稳定版）==========
     async function getAllWorlds() {
         try {
-            // 方法1：从父窗口读取 world_names（Z论坛脚本使用的方法，最可靠）
-            if (window.parent && window.parent.world_names && Array.isArray(window.parent.world_names)) {
-                return [...window.parent.world_names];
-            }
-            // 方法2：从当前窗口读取 world_names（某些环境下）
-            if (window.world_names && Array.isArray(window.world_names)) {
-                return [...window.world_names];
+            const ctx = getSTContext();
+            if (!ctx) {
+                console.warn('[HTYQ] Context 不存在');
+                return [];
             }
 
-            // 方法3：通过 SillyTavern 上下文 worldInfoManager
-            const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : null;
-            if (ctx && ctx.worldInfoManager) {
-                if (typeof ctx.worldInfoManager.getWorlds === 'function') {
-                    const worlds = await ctx.worldInfoManager.getWorlds();
-                    if (worlds && worlds.length) return worlds.map(w => w.name || w);
+            // 新版 WorldInfoManager
+            if (ctx.worldInfoManager) {
+                // 方法1：官方 getWorldNames
+                if (typeof ctx.worldInfoManager.getWorldNames === 'function') {
+                    try {
+                        const names = await ctx.worldInfoManager.getWorldNames();
+                        if (Array.isArray(names) && names.length > 0) {
+                            return names;
+                        }
+                    } catch (e) {
+                        console.warn('[HTYQ] getWorldNames 失败', e);
+                    }
                 }
+
+                // 方法2：getWorlds
+                if (typeof ctx.worldInfoManager.getWorlds === 'function') {
+                    try {
+                        const worlds = await ctx.worldInfoManager.getWorlds();
+                        if (Array.isArray(worlds) && worlds.length > 0) {
+                            return worlds.map(w => typeof w === 'string' ? w : (w.name || w.title || w.id));
+                        }
+                    } catch (e) {
+                        console.warn('[HTYQ] getWorlds 失败', e);
+                    }
+                }
+
+                // 方法3：直接读取 worlds 对象
                 if (ctx.worldInfoManager.worlds) {
                     const worlds = ctx.worldInfoManager.worlds;
-                    if (typeof worlds === 'object') return Object.keys(worlds);
-                    if (Array.isArray(worlds)) return worlds.map(w => w.name || w);
+                    if (Array.isArray(worlds)) {
+                        return worlds.map(w => typeof w === 'string' ? w : (w.name || w.title || w.id));
+                    }
+                    if (typeof worlds === 'object') {
+                        return Object.keys(worlds);
+                    }
                 }
             }
 
-            // 方法4：从 ctx.worldInfo.entries 中提取世界书名称（旧版）
-            if (ctx && ctx.worldInfo && ctx.worldInfo.entries) {
-                const worldsSet = new Set();
-                ctx.worldInfo.entries.forEach(entry => {
-                    if (entry.world) worldsSet.add(entry.world);
-                });
-                return Array.from(worldsSet);
+            // 旧版 worldInfo 兼容（备胎）
+            if (ctx.worldInfo) {
+                if (ctx.worldInfo.entries && Array.isArray(ctx.worldInfo.entries)) {
+                    const worldSet = new Set();
+                    ctx.worldInfo.entries.forEach(entry => {
+                        if (entry.world) worldSet.add(entry.world);
+                        if (entry.worldName) worldSet.add(entry.worldName);
+                    });
+                    if (worldSet.size > 0) return Array.from(worldSet);
+                }
+                if (ctx.worldInfo.lorebooks) {
+                    const lorebooks = ctx.worldInfo.lorebooks;
+                    if (Array.isArray(lorebooks)) {
+                        return lorebooks.map(lb => lb.name || lb.title || lb);
+                    }
+                    if (typeof lorebooks === 'object') {
+                        return Object.keys(lorebooks);
+                    }
+                }
             }
 
-            console.warn('[HTYQ] 无法获取世界书列表，请确保已创建世界书');
+            console.warn('[HTYQ] 未读取到任何世界书');
             return [];
-        } catch(e) {
-            console.error('[HTYQ] 获取世界书列表失败', e);
+        } catch (err) {
+            console.error('[HTYQ] getAllWorlds 总错误', err);
             return [];
         }
     }
 
+    // ========== 获取指定世界书的内容（稳定版）==========
+    async function getWorldContent(worldName) {
+        if (!worldName || typeof worldName !== 'string') return '';
+        const name = worldName.trim();
+        if (!name) return '';
+
+        try {
+            const ctx = getSTContext();
+            if (!ctx) return '';
+
+            // 新版 worldInfoManager
+            if (ctx.worldInfoManager) {
+                // 方法1：getWorld
+                if (typeof ctx.worldInfoManager.getWorld === 'function') {
+                    try {
+                        const world = await ctx.worldInfoManager.getWorld(name);
+                        if (world && world.entries) {
+                            let entries = Array.isArray(world.entries) ? world.entries : Object.values(world.entries);
+                            if (entries.length) {
+                                return entries.map(entry => {
+                                    const title = entry.comment || entry.name || '条目';
+                                    const content = entry.content || '';
+                                    return `【${title}】${content}`;
+                                }).join('\n');
+                            }
+                        }
+                    } catch (e) {
+                        console.warn(`[HTYQ] getWorld("${name}") 失败`, e);
+                    }
+                }
+
+                // 方法2：从 worlds 对象中读取
+                if (ctx.worldInfoManager.worlds) {
+                    let world = null;
+                    const worlds = ctx.worldInfoManager.worlds;
+                    if (typeof worlds === 'object' && !Array.isArray(worlds)) {
+                        world = worlds[name];
+                    } else if (Array.isArray(worlds)) {
+                        world = worlds.find(w => w?.name === name);
+                    }
+                    if (world && world.entries) {
+                        let entries = Array.isArray(world.entries) ? world.entries : Object.values(world.entries);
+                        if (entries.length) {
+                            return entries.map(entry => {
+                                const title = entry.comment || entry.name || '条目';
+                                const content = entry.content || '';
+                                return `【${title}】${content}`;
+                            }).join('\n');
+                        }
+                    }
+                }
+            }
+
+            // 旧版兼容（从 ctx.worldInfo.entries 筛选）
+            if (ctx.worldInfo && ctx.worldInfo.entries && Array.isArray(ctx.worldInfo.entries)) {
+                const entries = ctx.worldInfo.entries.filter(entry => entry.world === name || entry.worldName === name);
+                if (entries.length) {
+                    return entries.map(entry => {
+                        const title = entry.comment || entry.name || '条目';
+                        const content = entry.content || '';
+                        return `【${title}】${content}`;
+                    }).join('\n');
+                }
+            }
+
+            console.warn(`[HTYQ] 未找到世界书 "${name}" 的内容`);
+            return '';
+        } catch (err) {
+            console.error(`[HTYQ] 读取世界书 "${name}" 异常`, err);
+            return '';
+        }
+    }
+
+    // ========== 导出的公共接口 ==========
     return {
         escapeHtml,
         showFloatingWarning,
         triggerEnvironmentVFX,
         insertActiveContactMessage,
-        getAllWorlds,
-        authFetch
+        getAllWorlds,           // 新版稳定
+        getWorldContent        // 新版稳定
     };
 })();
