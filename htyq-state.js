@@ -1,4 +1,4 @@
-// 状态管理模块 - 移除 showFloatingWarning 和 escapeHtml（已移至 utils）
+// 状态管理模块
 window.HTYQ_STATE = (function() {
     const DEFAULT_DLCS = {
         world_engine: true,
@@ -31,9 +31,7 @@ window.HTYQ_STATE = (function() {
             accidentCooldown: 0,
             noContactCounter: 0,
             breaker: 0,
-            // 世界书手动导入列表
-            manualWorlds: [],        // 格式： [{ name, content, enabled }]
-            // 详细面板字段
+            manualWorlds: [],        // 新结构：[{ name, enabled, entries: [{title, content}] }]
             worldTime: '',
             overallAtmosphere: '',
             drivingEvent: '',
@@ -102,8 +100,16 @@ window.HTYQ_STATE = (function() {
                 }
                 if (!worldState.economy.economyVisibility) worldState.economy.economyVisibility = defaults.economy.economyVisibility;
                 if (!worldState.economy.fundsStatus) worldState.economy.fundsStatus = defaults.economy.fundsStatus;
-                // 确保 manualWorlds 存在
                 if (!worldState.manualWorlds) worldState.manualWorlds = [];
+                // 兼容旧结构：如果旧数据是 content 格式，尝试转换为 entries
+                if (worldState.manualWorlds.length && worldState.manualWorlds[0].content && !worldState.manualWorlds[0].entries) {
+                    worldState.manualWorlds = worldState.manualWorlds.map(w => ({
+                        name: w.name,
+                        enabled: w.enabled !== false,
+                        entries: [{ title: '世界书内容', content: w.content || '' }]
+                    }));
+                    saveWorldState();
+                }
             } catch(e) { worldState = getDefaultWorldState(); }
         } else {
             worldState = getDefaultWorldState();
