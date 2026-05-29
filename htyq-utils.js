@@ -1,6 +1,5 @@
-// 公共工具模块 - 最终修复版
+// 公共工具模块 - 最终稳定版（基于 SillyTavern 官方全局函数）
 window.HTYQ_UTILS = (function() {
-    // ========== 基础辅助 ==========
     function escapeHtml(str) {
         if (!str) return '';
         return String(str).replace(/[&<>]/g, function(m) {
@@ -66,10 +65,9 @@ window.HTYQ_UTILS = (function() {
         } catch(e) { console.warn(e); }
     }
 
-    // ========== 核心：获取世界书列表（使用 SillyTavern 官方全局函数）==========
+    // 获取世界书列表（使用 SillyTavern 官方全局函数）
     async function getAllWorlds() {
         try {
-            // 方法1：直接使用 SillyTavern 官方全局函数 getWorldbookNames (Z论坛使用的方式)
             if (typeof getWorldbookNames === 'function') {
                 const names = await getWorldbookNames();
                 if (names && Array.isArray(names) && names.length) {
@@ -77,18 +75,12 @@ window.HTYQ_UTILS = (function() {
                     return names;
                 }
             }
-
-            // 方法2：从 window.parent 读取 world_names（Z论坛备用方式）
             if (window.parent && window.parent.world_names && Array.isArray(window.parent.world_names)) {
-                console.log('[HTYQ] 从 parent.world_names 获取到世界书:', window.parent.world_names);
                 return [...window.parent.world_names];
             }
             if (window.world_names && Array.isArray(window.world_names)) {
-                console.log('[HTYQ] 从 window.world_names 获取到世界书:', window.world_names);
                 return [...window.world_names];
             }
-
-            // 方法3：尝试通过 SillyTavern 上下文 worldInfoManager（如果上面都失效）
             const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : null;
             if (ctx && ctx.worldInfoManager) {
                 if (typeof ctx.worldInfoManager.getWorldNames === 'function') {
@@ -102,8 +94,7 @@ window.HTYQ_UTILS = (function() {
                     }
                 }
             }
-
-            console.warn('[HTYQ] 未找到任何世界书列表，请确保已创建世界书');
+            console.warn('[HTYQ] 未找到任何世界书列表');
             return [];
         } catch (err) {
             console.error('[HTYQ] getAllWorlds 错误', err);
@@ -111,33 +102,28 @@ window.HTYQ_UTILS = (function() {
         }
     }
 
-    // ========== 核心：获取世界书内容（使用 SillyTavern 官方全局函数）==========
+    // 获取世界书内容（使用 SillyTavern 官方全局函数）
     async function getWorldContent(worldName) {
         if (!worldName || typeof worldName !== 'string') return '';
         const name = worldName.trim();
         if (!name) return '';
 
         try {
-            // 方法1：使用官方全局函数 getWorldbook (Z论坛使用的方式)
             if (typeof getWorldbook === 'function') {
-                console.log(`[HTYQ] 尝试使用 getWorldbook("${name}")`);
+                console.log(`[HTYQ] 使用 getWorldbook("${name}")`);
                 const entries = await getWorldbook(name);
                 if (entries && Array.isArray(entries) && entries.length) {
-                    // entries 格式: [{ content, comment?, name?, keys?, ... }]
                     return entries.map(entry => {
                         const title = entry.comment || entry.name || '条目';
                         const content = entry.content || '';
                         return `【${title}】${content}`;
                     }).join('\n');
                 }
-                // 可能返回空数组，表示世界书存在但没有条目
                 if (entries && entries.length === 0) {
                     console.warn(`[HTYQ] 世界书 "${name}" 存在但无条目`);
-                    return '';
                 }
+                return '';
             }
-
-            // 方法2：通过 SillyTavern 上下文 worldInfoManager.getWorld
             const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : null;
             if (ctx && ctx.worldInfoManager && typeof ctx.worldInfoManager.getWorld === 'function') {
                 const world = await ctx.worldInfoManager.getWorld(name);
@@ -152,8 +138,7 @@ window.HTYQ_UTILS = (function() {
                     }
                 }
             }
-
-            console.warn(`[HTYQ] 无法读取世界书 "${name}" 的内容（无条目或函数不存在）`);
+            console.warn(`[HTYQ] 无法读取世界书 "${name}" 的内容`);
             return '';
         } catch (err) {
             console.error(`[HTYQ] getWorldContent("${name}") 错误`, err);
@@ -161,7 +146,6 @@ window.HTYQ_UTILS = (function() {
         }
     }
 
-    // ========== 导出的公共接口 ==========
     return {
         escapeHtml,
         showFloatingWarning,
