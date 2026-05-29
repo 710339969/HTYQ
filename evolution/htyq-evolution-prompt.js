@@ -1,4 +1,4 @@
-// 构建推演 Prompt（使用稳定版世界书读取）
+// 构建推演 Prompt（使用手动导入的世界书）
 window.HTYQ_EVOLUTION_PROMPT = (function() {
     const STATE = window.HTYQ_STATE;
     const RULES = window.HTYQ_RULES;
@@ -25,14 +25,18 @@ window.HTYQ_EVOLUTION_PROMPT = (function() {
         }
     }
 
-    async function getWorldContentByNames(worldNames) {
-        if (!worldNames || !worldNames.length) return '';
+    // 从手动导入的世界书列表中获取内容
+    function getManualWorldsContent(manualWorlds, maxChars) {
+        if (!manualWorlds || !manualWorlds.length) return '';
         let combined = '';
-        for (const name of worldNames) {
-            const content = await utils.getWorldContent(name);
-            if (content) {
-                combined += `\n【世界书：${name}】\n${content}\n`;
+        for (const world of manualWorlds) {
+            if (!world.enabled) continue;
+            if (world.content && world.content.trim()) {
+                combined += `\n【世界书：${world.name}】\n${world.content}\n`;
             }
+        }
+        if (combined.length > maxChars) {
+            combined = combined.substring(0, maxChars) + '\n…(内容过长已截断)';
         }
         return combined;
     }
@@ -42,38 +46,17 @@ window.HTYQ_EVOLUTION_PROMPT = (function() {
         let worldContext = '';
         worldContext += await getCharacterCardInfo();
 
-        const ws = STATE.worldState;
-        let worldContent = '';
-
-        if (ws.autoBindCharacterWorld) {
-            try {
-                const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : getContext();
-                const charId = ctx.characterId;
-                if (charId) {
-                    let characters = ctx.characters || [];
-                    if (!characters.length && window.parent && window.parent.characters) {
-                        characters = window.parent.characters;
-                    }
-                    const char = characters.find(c => c.avatar === charId || c.id === charId);
-                    if (char && char.world) {
-                        worldContent = await getWorldContentByNames([char.world]);
-                    }
-                }
-            } catch(e) {
-                console.warn('[HTYQ] 自动绑定世界书失败', e);
-            }
-        } else {
-            const selected = ws.selectedWorlds || [];
-            if (selected.length) {
-                worldContent = await getWorldContentByNames(selected);
-            }
-        }
-
-        if (worldContent) {
+        // 读取手动导入的世界书
+        const manualWorlds = STATE.worldState.manualWorlds || [];
+        if (manualWorlds.length) {
             const maxChars = STATE.globalApiSettings.worldInfoMaxChars || 2000;
-            worldContext += `\n【世界书设定】\n${worldContent.substring(0, maxChars)}\n`;
+            const worldContent = getManualWorldsContent(manualWorlds, maxChars);
+            if (worldContent) {
+                worldContext += `\n【世界书设定】\n${worldContent}\n`;
+            }
         }
 
+        // 自定义额外世界背景
         if (STATE.globalApiSettings.customWorldInfo && STATE.globalApiSettings.customWorldInfo.trim()) {
             worldContext += `\n【额外世界背景】\n${STATE.globalApiSettings.customWorldInfo.substring(0, 2000)}\n`;
         }
