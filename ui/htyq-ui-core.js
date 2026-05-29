@@ -43,9 +43,14 @@ window.HTYQ_UI = (function() {
             default: break;
         }
         const roundSpan = document.getElementById('htyq-round');
-        const goldSpan = document.getElementById('htyq-gold');
+        const currencySpan = document.getElementById('htyq-currency');
         if (roundSpan) roundSpan.textContent = STATE.worldState.round;
-        if (goldSpan) goldSpan.textContent = STATE.worldState.economy.userGold;
+        if (currencySpan) {
+            const eco = STATE.worldState.economy;
+            const name = eco.currencyName || '货币';
+            const amount = (eco.currencyAmount !== null && eco.currencyAmount !== undefined) ? eco.currencyAmount : '?';
+            currencySpan.textContent = `${amount} ${name}`;
+        }
     }
 
     function buildUI() {
@@ -87,7 +92,7 @@ window.HTYQ_UI = (function() {
             <div class="htyq-view" id="htyq-view-settings"></div>
             <div class="htyq-footer">
                 <button id="htyq-evolve-btn" class="htyq-evolve-btn">🌀 手动推演一轮</button>
-                <div class="htyq-stats">轮次: <span id="htyq-round">0</span> | 金币: <span id="htyq-gold">0</span></div>
+                <div class="htyq-stats">轮次: <span id="htyq-round">0</span> | 货币: <span id="htyq-currency">0 未定义</span></div>
             </div>
         `;
 
