@@ -1,4 +1,4 @@
-// 公共工具模块 - 修复版（只使用酒馆原生 API，不调用 /api/worldinfo/all）
+// 公共工具模块 - 修复版（优先使用 parent.world_names）
 window.HTYQ_UTILS = (function() {
     // HTML 转义
     function escapeHtml(str) {
@@ -93,26 +93,25 @@ window.HTYQ_UTILS = (function() {
         return fetchFn.call(window.parent || window, url, options);
     }
 
-    // 获取所有世界书名称 - 只使用酒馆原生数据，不调用不存在的 API
+    // 获取所有世界书名称（修复版：优先使用 parent.world_names）
     async function getAllWorlds() {
         try {
-            // 方法1：直接读取酒馆全局变量 world_names（最可靠）
+            // 方法1：从父窗口读取 world_names（Z论坛脚本使用的方法，最可靠）
             if (window.parent && window.parent.world_names && Array.isArray(window.parent.world_names)) {
                 return [...window.parent.world_names];
             }
+            // 方法2：从当前窗口读取 world_names（某些环境下）
             if (window.world_names && Array.isArray(window.world_names)) {
                 return [...window.world_names];
             }
 
-            // 方法2：从 SillyTavern 上下文 worldInfoManager 获取
+            // 方法3：通过 SillyTavern 上下文 worldInfoManager
             const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : null;
             if (ctx && ctx.worldInfoManager) {
-                // 2.1 如果存在 getWorlds 方法
                 if (typeof ctx.worldInfoManager.getWorlds === 'function') {
                     const worlds = await ctx.worldInfoManager.getWorlds();
                     if (worlds && worlds.length) return worlds.map(w => w.name || w);
                 }
-                // 2.2 直接读取 worlds 对象
                 if (ctx.worldInfoManager.worlds) {
                     const worlds = ctx.worldInfoManager.worlds;
                     if (typeof worlds === 'object') return Object.keys(worlds);
@@ -120,7 +119,7 @@ window.HTYQ_UTILS = (function() {
                 }
             }
 
-            // 方法3：从 ctx.worldInfo.entries 中提取（旧版兼容）
+            // 方法4：从 ctx.worldInfo.entries 中提取世界书名称（旧版）
             if (ctx && ctx.worldInfo && ctx.worldInfo.entries) {
                 const worldsSet = new Set();
                 ctx.worldInfo.entries.forEach(entry => {
