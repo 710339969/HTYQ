@@ -1,4 +1,4 @@
-// 构建推演 Prompt（使用手动导入的世界书，支持条目结构）
+// 构建推演 Prompt（使用手动导入的世界书，支持纯文本内容）
 window.HTYQ_EVOLUTION_PROMPT = (function() {
     const STATE = window.HTYQ_STATE;
     const RULES = window.HTYQ_RULES;
@@ -25,19 +25,14 @@ window.HTYQ_EVOLUTION_PROMPT = (function() {
         }
     }
 
-    // 从手动导入的世界书条目中生成完整文本
+    // 从手动导入的世界书中获取内容（纯文本合并）
     function getManualWorldsContent(manualWorlds, maxChars) {
         if (!manualWorlds || !manualWorlds.length) return '';
         let combined = '';
         for (const world of manualWorlds) {
             if (!world.enabled) continue;
-            if (world.entries && world.entries.length) {
-                combined += `\n【世界书：${world.name}】\n`;
-                for (const entry of world.entries) {
-                    if (entry.content && entry.content.trim()) {
-                        combined += `\n### ${entry.title}\n${entry.content}\n`;
-                    }
-                }
+            if (world.content && world.content.trim()) {
+                combined += `\n【世界书：${world.name}】\n${world.content}\n`;
             }
         }
         if (combined.length > maxChars) {
