@@ -1,4 +1,4 @@
-// UI 核心模块：构建界面、选项卡切换、聚合各子渲染器
+// UI 核心模块：构建界面、选项卡切换、聚合各子渲染器（全中文界面）
 window.HTYQ_UI = (function() {
     const STATE = window.HTYQ_STATE;
     const utils = window.HTYQ_UTILS;
@@ -119,7 +119,29 @@ window.HTYQ_UI = (function() {
                     mobileSelect.style.display = 'block';
                     mobileSelect.innerHTML = '';
                     const tabs = ['dashboard','chronicle','events','factions','relations','rumors','economy','blackmarket','reputation','characters','causal','diplomacy','memos','settings'];
-                    tabs.forEach(t => { const opt = document.createElement('option'); opt.value = t; opt.textContent = t.charAt(0).toUpperCase() + t.slice(1); if (t === currentTab) opt.selected = true; mobileSelect.appendChild(opt); });
+                    const labelMap = {
+                        dashboard: '仪表',
+                        chronicle: '编年史',
+                        events: '事件链',
+                        factions: '势力',
+                        relations: '关系',
+                        rumors: '流言',
+                        economy: '经济',
+                        blackmarket: '黑市',
+                        reputation: '声誉',
+                        characters: '角色状态',
+                        causal: '因果链',
+                        diplomacy: '外交事件',
+                        memos: '备忘',
+                        settings: '设置'
+                    };
+                    tabs.forEach(t => {
+                        const opt = document.createElement('option');
+                        opt.value = t;
+                        opt.textContent = labelMap[t] || t;
+                        if (t === currentTab) opt.selected = true;
+                        mobileSelect.appendChild(opt);
+                    });
                 }
             } else {
                 if (btnDiv) btnDiv.style.display = 'flex';
