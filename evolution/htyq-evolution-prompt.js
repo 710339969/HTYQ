@@ -1,4 +1,4 @@
-// 构建推演 Prompt（使用手动导入的世界书）
+// 构建推演 Prompt（使用手动导入的世界书，支持条目结构）
 window.HTYQ_EVOLUTION_PROMPT = (function() {
     const STATE = window.HTYQ_STATE;
     const RULES = window.HTYQ_RULES;
@@ -25,14 +25,19 @@ window.HTYQ_EVOLUTION_PROMPT = (function() {
         }
     }
 
-    // 从手动导入的世界书列表中获取内容
+    // 从手动导入的世界书条目中生成完整文本
     function getManualWorldsContent(manualWorlds, maxChars) {
         if (!manualWorlds || !manualWorlds.length) return '';
         let combined = '';
         for (const world of manualWorlds) {
             if (!world.enabled) continue;
-            if (world.content && world.content.trim()) {
-                combined += `\n【世界书：${world.name}】\n${world.content}\n`;
+            if (world.entries && world.entries.length) {
+                combined += `\n【世界书：${world.name}】\n`;
+                for (const entry of world.entries) {
+                    if (entry.content && entry.content.trim()) {
+                        combined += `\n### ${entry.title}\n${entry.content}\n`;
+                    }
+                }
             }
         }
         if (combined.length > maxChars) {
@@ -46,7 +51,6 @@ window.HTYQ_EVOLUTION_PROMPT = (function() {
         let worldContext = '';
         worldContext += await getCharacterCardInfo();
 
-        // 读取手动导入的世界书
         const manualWorlds = STATE.worldState.manualWorlds || [];
         if (manualWorlds.length) {
             const maxChars = STATE.globalApiSettings.worldInfoMaxChars || 2000;
@@ -56,7 +60,6 @@ window.HTYQ_EVOLUTION_PROMPT = (function() {
             }
         }
 
-        // 自定义额外世界背景
         if (STATE.globalApiSettings.customWorldInfo && STATE.globalApiSettings.customWorldInfo.trim()) {
             worldContext += `\n【额外世界背景】\n${STATE.globalApiSettings.customWorldInfo.substring(0, 2000)}\n`;
         }
