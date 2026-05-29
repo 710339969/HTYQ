@@ -73,8 +73,15 @@ window.HTYQ_EVOLUTION_CORE = (function() {
             s.factionRelations = s.factionRelations.slice(0, 30);
             changed = true;
         }
+        // 经济数据更新（适配新结构）
         if (data.economy) {
-            if (typeof data.economy.userGold === 'number') { s.economy.userGold += data.economy.userGold; changed = true; }
+            if (typeof data.economy.currencyName === 'string') { s.economy.currencyName = data.economy.currencyName; changed = true; }
+            if (typeof data.economy.currencyAmount === 'number') { 
+                // 首次设置时直接赋值，否则累加
+                if (s.economy.currencyAmount === null) s.economy.currencyAmount = data.economy.currencyAmount;
+                else s.economy.currencyAmount += data.economy.currencyAmount;
+                changed = true;
+            }
             if (data.economy.marketTrend) { s.economy.marketTrend = data.economy.marketTrend; changed = true; }
             if (Array.isArray(data.economy.keyResources)) { s.economy.keyResources = data.economy.keyResources; changed = true; }
             if (data.economy.fundsStatus) { s.economy.fundsStatus = data.economy.fundsStatus; changed = true; }
@@ -92,7 +99,7 @@ window.HTYQ_EVOLUTION_CORE = (function() {
         }
         if (data.active_contact) { changed = true; }
 
-        // 自动生成 pendingEvents（剩余轮数 ≤3 的事件链）
+        // 自动生成 pendingEvents
         const pending = s.events.filter(e => {
             const remaining = (e.totalRounds && e.currentRound) ? (e.totalRounds - e.currentRound) : -1;
             return remaining >= 0 && remaining <= 3;
