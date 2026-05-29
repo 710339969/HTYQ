@@ -1,4 +1,4 @@
-// 设置页面渲染模块 - 手动导入世界书，支持从酒馆导入、上传文件，带测试预览功能
+// 设置页面渲染模块 - 手动导入世界书，支持上传文件，优化编辑交互
 window.HTYQ_UI_SETTINGS = (function() {
     const STATE = window.HTYQ_STATE;
     const utils = window.HTYQ_UTILS;
@@ -27,7 +27,6 @@ window.HTYQ_UI_SETTINGS = (function() {
                         </label>
                         <div>
                             <button class="htyq-test-world" data-index="${idx}" style="background:#8b5cf6; border:none; color:white; border-radius:4px; padding:4px 10px; margin-right:6px; cursor:pointer;">🔍 测试</button>
-                            <button class="htyq-edit-world" data-index="${idx}" style="background:#3b82f6; border:none; color:white; border-radius:4px; padding:4px 10px; margin-right:6px; cursor:pointer;">编辑</button>
                             <button class="htyq-del-world" data-index="${idx}" style="background:#ef4444; border:none; color:white; border-radius:4px; padding:4px 10px; cursor:pointer;">删除</button>
                         </div>
                     </div>
@@ -70,27 +69,6 @@ window.HTYQ_UI_SETTINGS = (function() {
                     }
                 });
             });
-            // 编辑：将世界书内容填入上方表单，并高亮当前编辑索引
-            listDiv.querySelectorAll('.htyq-edit-world').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const idx = parseInt(btn.dataset.index);
-                    const world = worldState.manualWorlds[idx];
-                    if (world) {
-                        document.getElementById('htyq-world-name').value = world.name;
-                        document.getElementById('htyq-world-content').value = world.content;
-                        document.getElementById('htyq-edit-index').value = idx;
-                        // 滚动到表单并高亮边框
-                        const formDiv = container.querySelector('#htyq-world-edit-form');
-                        if (formDiv) {
-                            formDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            formDiv.style.transition = 'box-shadow 0.3s';
-                            formDiv.style.boxShadow = '0 0 0 2px #fbbf24';
-                            setTimeout(() => { formDiv.style.boxShadow = ''; }, 1500);
-                        }
-                        utils.showFloatingWarning(`正在编辑「${world.name}」，修改后请点击“更新选中的世界书”`, false);
-                    }
-                });
-            });
         }
 
         // ========== 构建整个设置页面 ==========
@@ -125,21 +103,21 @@ window.HTYQ_UI_SETTINGS = (function() {
             <div class="htyq-settings-section">
                 <h3>📚 世界书导入管理器（手动模式）</h3>
                 <div style="margin-bottom:12px;">
-                    <button id="htyq-import-from-silly" class="htyq-small-btn" style="background:#8b5cf6;">📖 从酒馆导入世界书</button>
                     <button id="htyq-upload-file" class="htyq-small-btn" style="background:#3b82f6;">📁 上传文件导入</button>
+                    <button id="htyq-select-world-to-edit" class="htyq-small-btn" style="background:#f59e0b;">✏️ 选择世界书并编辑</button>
                 </div>
                 <div id="htyq-world-edit-form" style="border:1px solid #334155; border-radius:8px; padding:12px; margin-bottom:16px;">
                     <input type="text" id="htyq-world-name" placeholder="世界书名称" style="width:100%; margin-bottom:8px; background:#0f172a; border:1px solid #334155; color:white; padding:6px;">
                     <textarea id="htyq-world-content" rows="6" placeholder="粘贴世界书内容或手动输入..." style="width:100%; background:#0f172a; border:1px solid #334155; color:white; padding:6px; font-family:monospace;"></textarea>
                     <div style="margin-top:8px; display:flex; gap:8px;">
                         <button id="htyq-add-world" class="htyq-small-btn">➕ 添加新世界书</button>
-                        <button id="htyq-update-world" class="htyq-small-btn" style="background:#f59e0b;">✏️ 更新选中的世界书</button>
+                        <button id="htyq-update-world" class="htyq-small-btn" style="background:#f59e0b;">💾 保存修改到当前世界书</button>
                     </div>
                     <input type="hidden" id="htyq-edit-index" value="-1">
                     <div style="margin-top:8px; font-size:12px; color:#94a3b8;">
                         💡 操作说明：<br>
                         - 填写名称和内容后，点击「添加新世界书」直接新增。<br>
-                        - 若要修改已有世界书，先点击卡片上的「编辑」，内容会填充到上方表单，修改后点击「更新选中的世界书」。<br>
+                        - 若要修改已有世界书，先点击「选择世界书并编辑」，在下拉列表中选择，内容会自动填充到上方表单，修改后点击「保存修改到当前世界书」。<br>
                         - 点击「测试」可预览世界书内容。<br>
                         - 勾选「启用」后，该世界书才会在推演时生效。
                     </div>
@@ -189,7 +167,7 @@ window.HTYQ_UI_SETTINGS = (function() {
         }
 
         // ========== 事件绑定 ==========
-        // 1. API 模式切换
+        // API 模式切换
         document.querySelectorAll('input[name="apiMode"]').forEach(r => r.addEventListener('change', (e) => {
             const customDiv = container.querySelector('#htyq-custom-settings');
             if (customDiv) customDiv.style.display = e.target.value === 'custom' ? 'block' : 'none';
@@ -313,11 +291,12 @@ window.HTYQ_UI_SETTINGS = (function() {
         }
 
         // ========== 世界书操作 ==========
-        // 添加新世界书
-        const addBtn = container.querySelector('#htyq-add-world');
         const nameInput = container.querySelector('#htyq-world-name');
         const contentInput = container.querySelector('#htyq-world-content');
         const editIndexInput = container.querySelector('#htyq-edit-index');
+
+        // 添加新世界书
+        const addBtn = container.querySelector('#htyq-add-world');
         if (addBtn) {
             addBtn.addEventListener('click', () => {
                 const name = nameInput.value.trim();
@@ -335,7 +314,8 @@ window.HTYQ_UI_SETTINGS = (function() {
                 utils.showFloatingWarning(`已添加世界书「${name}」`, false);
             });
         }
-        // 更新世界书
+
+        // 保存修改到当前世界书（更新）
         const updateBtn = container.querySelector('#htyq-update-world');
         if (updateBtn) {
             updateBtn.addEventListener('click', () => {
@@ -354,50 +334,47 @@ window.HTYQ_UI_SETTINGS = (function() {
                     nameInput.value = '';
                     contentInput.value = '';
                     editIndexInput.value = '-1';
-                    utils.showFloatingWarning('已更新', false);
+                    utils.showFloatingWarning(`已更新世界书「${newName}」`, false);
                 } else {
-                    utils.showFloatingWarning('请先点击某世界书的「编辑」按钮，选中后再点击「更新选中的世界书」', true);
+                    utils.showFloatingWarning('请先点击「选择世界书并编辑」选中一个世界书', true);
                 }
             });
         }
-        // 从酒馆导入世界书
-        const importSillyBtn = container.querySelector('#htyq-import-from-silly');
-        if (importSillyBtn) {
-            importSillyBtn.addEventListener('click', async () => {
-                try {
-                    const worldNames = await utils.getAllWorlds();
-                    if (!worldNames.length) {
-                        utils.showFloatingWarning('未找到任何世界书，请确保SillyTavern中已创建世界书', true);
-                        return;
-                    }
-                    const selected = prompt(`请输入要导入的世界书名称（可从以下列表中选择）：\n${worldNames.join('\n')}`);
-                    if (!selected) return;
-                    if (!worldNames.includes(selected)) {
-                        utils.showFloatingWarning(`未找到名为「${selected}」的世界书`, true);
-                        return;
-                    }
-                    const content = await utils.getWorldContent(selected);
-                    if (!content) {
-                        utils.showFloatingWarning(`读取世界书「${selected}」内容为空或失败`, true);
-                        return;
-                    }
-                    if (worldState.manualWorlds.some(w => w.name === selected)) {
-                        if (!confirm(`「${selected}」已存在，是否覆盖？`)) return;
-                        const idx = worldState.manualWorlds.findIndex(w => w.name === selected);
-                        worldState.manualWorlds[idx].content = content;
-                        worldState.manualWorlds[idx].enabled = true;
-                    } else {
-                        worldState.manualWorlds.push({ name: selected, content, enabled: true });
-                    }
-                    STATE.saveWorldState();
-                    renderManualWorldList();
-                    utils.showFloatingWarning(`成功导入世界书「${selected}」`, false);
-                } catch (err) {
-                    console.error(err);
-                    utils.showFloatingWarning('从酒馆导入失败：' + err.message, true);
+
+        // 选择世界书并编辑（弹出选择框）
+        const selectEditBtn = container.querySelector('#htyq-select-world-to-edit');
+        if (selectEditBtn) {
+            selectEditBtn.addEventListener('click', () => {
+                const worlds = worldState.manualWorlds;
+                if (!worlds.length) {
+                    utils.showFloatingWarning('没有世界书可供编辑，请先添加', true);
+                    return;
                 }
+                // 构建选择列表文本
+                const options = worlds.map((w, idx) => `${idx + 1}. ${w.name} (${w.content.length}字符)`).join('\n');
+                const selectedNum = prompt(`请选择要编辑的世界书（输入序号）：\n${options}\n\n`);
+                if (selectedNum === null) return;
+                const idx = parseInt(selectedNum) - 1;
+                if (isNaN(idx) || idx < 0 || idx >= worlds.length) {
+                    utils.showFloatingWarning('无效的序号', true);
+                    return;
+                }
+                const world = worlds[idx];
+                nameInput.value = world.name;
+                contentInput.value = world.content;
+                editIndexInput.value = idx;
+                // 高亮表单
+                const formDiv = container.querySelector('#htyq-world-edit-form');
+                if (formDiv) {
+                    formDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    formDiv.style.transition = 'box-shadow 0.3s';
+                    formDiv.style.boxShadow = '0 0 0 2px #fbbf24';
+                    setTimeout(() => { formDiv.style.boxShadow = ''; }, 1500);
+                }
+                utils.showFloatingWarning(`已加载「${world.name}」，修改后请点击「保存修改到当前世界书」`, false);
             });
         }
+
         // 上传文件导入
         const uploadBtn = container.querySelector('#htyq-upload-file');
         if (uploadBtn) {
