@@ -1,69 +1,10 @@
-// 构建推演 Prompt（修复世界书获取，避免 500 错误）
+// 构建推演 Prompt（使用稳定版世界书读取）
 window.HTYQ_EVOLUTION_PROMPT = (function() {
     const STATE = window.HTYQ_STATE;
     const RULES = window.HTYQ_RULES;
     const utils = window.HTYQ_UTILS;
-    const authFetch = utils.authFetch;
 
-    // 获取单个世界书的内容
-    async function fetchWorldContent(worldName) {
-        if (!worldName || typeof worldName !== 'string') return '';
-        const cleanName = worldName.trim();
-        if (!cleanName) {
-            console.warn('[HTYQ] 世界书名称为空，跳过');
-            return '';
-        }
-
-        try {
-            const res = await authFetch('/api/worldinfo/get', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: cleanName })
-            });
-
-            if (!res.ok) {
-                console.warn(`[HTYQ] 获取世界书 "${cleanName}" 失败，状态码 ${res.status}`);
-                // 500 错误时尝试读取错误信息但不抛出，只记录
-                let errorText = '';
-                try { errorText = await res.text(); } catch(e) {}
-                if (errorText) console.warn('[HTYQ] 错误详情:', errorText);
-                return '';
-            }
-
-            const data = await res.json();
-            if (data && data.entries) {
-                // 处理数组格式或对象格式的 entries
-                let entries = Array.isArray(data.entries) ? data.entries : Object.values(data.entries);
-                if (entries && entries.length) {
-                    return entries.map(entry => {
-                        const title = entry.comment || entry.name || '未命名条目';
-                        const content = entry.content || '';
-                        return `【${title}】${content}`;
-                    }).join('\n');
-                }
-            }
-            console.warn(`[HTYQ] 世界书 "${cleanName}" 没有有效条目`);
-            return '';
-        } catch(e) {
-            console.error(`[HTYQ] 请求世界书 "${cleanName}" 异常`, e);
-            return '';
-        }
-    }
-
-    // 批量获取多个世界书内容
-    async function getWorldContentByNames(worldNames) {
-        if (!worldNames || !worldNames.length) return '';
-        let combined = '';
-        for (const name of worldNames) {
-            const content = await fetchWorldContent(name);
-            if (content) {
-                combined += `\n【世界书：${name}】\n${content}\n`;
-            }
-        }
-        return combined;
-    }
-
-    // 获取角色卡信息（略作增强）
+    // 获取角色卡信息
     async function getCharacterCardInfo() {
         try {
             const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : getContext();
@@ -85,6 +26,19 @@ window.HTYQ_EVOLUTION_PROMPT = (function() {
         }
     }
 
+    // 批量获取多个世界书的内容
+    async function getWorldContentByNames(worldNames) {
+        if (!worldNames || !worldNames.length) return '';
+        let combined = '';
+        for (const name of worldNames) {
+            const content = await utils.getWorldContent(name);
+            if (content) {
+                combined += `\n【世界书：${name}】\n${content}\n`;
+            }
+        }
+        return combined;
+    }
+
     // 构建完整的推演 Prompt
     async function buildEvolutionPrompt() {
         const rules = RULES.getFullSystemRules(STATE.globalApiSettings.enabledDlcs);
@@ -94,8 +48,8 @@ window.HTYQ_EVOLUTION_PROMPT = (function() {
         const ws = STATE.worldState;
         let worldContent = '';
 
-        // 根据用户设置选择世界书来源
         if (ws.autoBindCharacterWorld) {
+            // 自动从角色卡绑定的世界书读取
             try {
                 const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : getContext();
                 const charId = ctx.characterId;
