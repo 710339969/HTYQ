@@ -1,4 +1,4 @@
-// 悬浮地球面板 - 完整版（含拆分后的设置模块）
+// 悬浮地球面板 - 完整版（适配拆分后的设置模块）
 (function() {
     if (window.__FLOATING_GLOBE_LOADED__) return;
     window.__FLOATING_GLOBE_LOADED__ = true;
@@ -261,11 +261,12 @@
             'ui/htyq-ui-causal.js',
             'ui/htyq-ui-diplomacy.js',
             'ui/htyq-ui-memos.js',
-            // 设置子模块（按依赖顺序）
+            // 设置模块（拆分版）
             'ui/settings/htyq-ui-settings-helpers.js',
             'ui/settings/htyq-ui-settings-worldbook.js',
             'ui/settings/htyq-ui-settings-core.js',
-            'ui/htyq-ui-settings.js',
+            'ui/htyq-ui-settings.js',   // 入口文件
+            'ui/htyq-ui-core.js',
             // Evolution 子模块
             'evolution/htyq-evolution-core.js',
             'evolution/htyq-evolution-prompt.js',
