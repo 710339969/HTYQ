@@ -1,4 +1,4 @@
-// 状态管理模块 - 增加世界书来源管理，全局存储
+// 状态管理模块 - 增加按聊天ID隔离存储
 window.HTYQ_STATE = (function() {
     const DEFAULT_DLCS = {
         world_engine: true,
@@ -89,6 +89,55 @@ window.HTYQ_STATE = (function() {
         return null;
     }
 
+    function getCurrentChatId() {
+        const ctx = getContext();
+        return ctx?.chatId || 'default';
+    }
+
+    // 保存当前聊天的世界状态（按chatId隔离）
+    function saveWorldState() {
+        const chatId = getCurrentChatId();
+        if (chatId) {
+            localStorage.setItem(`htyq_world_${chatId}`, JSON.stringify(worldState));
+        } else {
+            localStorage.setItem('htyq_world_global', JSON.stringify(worldState));
+        }
+    }
+
+    // 加载指定聊天（或当前聊天）的世界状态
+    function loadWorldState(chatId) {
+        const targetChatId = chatId || getCurrentChatId();
+        let stored = null;
+        if (targetChatId) {
+            stored = localStorage.getItem(`htyq_world_${targetChatId}`);
+        }
+        if (!stored) {
+            stored = localStorage.getItem('htyq_world_global');
+        }
+        if (stored) {
+            try {
+                const parsed = JSON.parse(stored);
+                worldState = { ...getDefaultWorldState(), ...parsed };
+                const defaults = getDefaultWorldState();
+                for (let key in defaults) if (worldState[key] === undefined) worldState[key] = defaults[key];
+                if (!worldState.manualWorlds) worldState.manualWorlds = [];
+                worldState.manualWorlds = worldState.manualWorlds.map(w => ({ source: 'manual', ...w }));
+            } catch(e) { worldState = getDefaultWorldState(); }
+        } else {
+            worldState = getDefaultWorldState();
+        }
+        // 确保保存回正确的key
+        saveWorldState();
+        return worldState;
+    }
+
+    // 重置当前聊天的世界状态
+    function resetCurrentWorld() {
+        worldState = getDefaultWorldState();
+        saveWorldState();
+        return worldState;
+    }
+
     function saveGlobalSettings() {
         const ctx = getContext();
         if (ctx && ctx.extensionSettings) {
@@ -126,32 +175,6 @@ window.HTYQ_STATE = (function() {
         else globalApiSettings.enabledDlcs = { ...DEFAULT_DLCS, ...globalApiSettings.enabledDlcs };
     }
 
-    function saveWorldState() {
-        localStorage.setItem('htyq_world_global', JSON.stringify(worldState));
-    }
-
-    function loadWorldState() {
-        const stored = localStorage.getItem('htyq_world_global');
-        if (stored) {
-            try {
-                const parsed = JSON.parse(stored);
-                worldState = { ...getDefaultWorldState(), ...parsed };
-                const defaults = getDefaultWorldState();
-                for (let key in defaults) if (worldState[key] === undefined) worldState[key] = defaults[key];
-                if (!worldState.manualWorlds) worldState.manualWorlds = [];
-                // 为旧数据添加 source 字段（默认为 manual）
-                worldState.manualWorlds = worldState.manualWorlds.map(w => ({ source: 'manual', ...w }));
-            } catch(e) { worldState = getDefaultWorldState(); }
-        } else {
-            worldState = getDefaultWorldState();
-        }
-    }
-
-    function getCurrentChatId() {
-        const ctx = getContext();
-        return ctx?.chatId || 'default';
-    }
-
     function addChronicle(type, title, content) {
         worldState.chronicles.unshift({
             round: worldState.round,
@@ -164,7 +187,6 @@ window.HTYQ_STATE = (function() {
         saveWorldState();
     }
 
-    // 新增：按来源删除世界书
     function clearWorldsBySource(sources) {
         const before = worldState.manualWorlds.length;
         worldState.manualWorlds = worldState.manualWorlds.filter(w => !sources.includes(w.source));
@@ -172,7 +194,6 @@ window.HTYQ_STATE = (function() {
         return before - worldState.manualWorlds.length;
     }
 
-    // 新增：添加带来源的世界书
     function addWorldbookWithSource(name, content, source = 'manual', enabled = true) {
         const existing = worldState.manualWorlds.find(w => w.name === name);
         if (existing) {
@@ -193,6 +214,7 @@ window.HTYQ_STATE = (function() {
         getCurrentChatId,
         saveWorldState,
         loadWorldState,
+        resetCurrentWorld,
         saveGlobalSettings,
         loadGlobalSettings,
         addChronicle,
