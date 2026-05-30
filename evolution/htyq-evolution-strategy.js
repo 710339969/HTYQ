@@ -1,80 +1,43 @@
-// 推演策略模块 - 管理分步调用、字段裁剪、最高延迟轮次
+// 推演策略模块 - 动态获取 API 和 Prompt 模块
 window.HTYQ_EVOLUTION_STRATEGY = (function() {
     const STATE = window.HTYQ_STATE;
-    const promptBuilder = window.HTYQ_EVOLUTION_PROMPT;   // 关键修复：直接引用
-    const api = window.HTYQ_EVOLUTION_API;
     const core = window.HTYQ_EVOLUTION_CORE;
 
-    // 字段分组定义（与 prompt 模块保持一致）
-    const FIELD_GROUPS = {
-        core: {
-            fields: [
-                'world_time', 'world_digest', 'overall_atmosphere', 'driving_event',
-                'citizen_mood', 'security_status', 'astrology', 'direct_layer',
-                'near_layer', 'far_layer', 'upcoming_schedules', 'reputation',
-                'reputation_change', 'rumors', 'events'
-            ],
-            dependsOn: null,
-            maxDelay: 0
-        },
-        economy: {
-            fields: ['economy'],
-            dependsOn: 'economy',
-            maxDelay: 1
-        },
-        factions: {
-            fields: ['factions', 'faction_relations'],
-            dependsOn: 'group_dynamics',
-            maxDelay: 2
-        },
-        characters: {
-            fields: ['character_states'],
-            dependsOn: null,
-            maxDelay: 2
-        },
-        causal: {
-            fields: ['causal_chain', 'recent_actions', 'memory_summary'],
-            dependsOn: null,
-            maxDelay: 3
-        },
-        random: {
-            fields: ['random_events'],
-            dependsOn: null,
-            maxDelay: 1
-        },
-        power: {
-            fields: ['power_peaks'],
-            dependsOn: 'power_peak',
-            maxDelay: 3
-        },
-        internal: {
-            fields: ['internal_messages'],
-            dependsOn: 'group_relation',
-            maxDelay: 2
-        },
-        blackmarket: {
-            fields: ['blackMarket', 'accidents'],
-            dependsOn: 'blackmarket',
-            maxDelay: 3
-        },
-        secret: {
-            fields: ['secret_box'],
-            dependsOn: 'secret_asset',
-            maxDelay: 4
-        },
-        memos: {
-            fields: ['pending_foreshadowing', 'key_values_memo', 'round_focus', 'cross_region_memo', 'blood_feud_memo'],
-            dependsOn: null,
-            maxDelay: 4
-        },
-        diplomatic: {
-            fields: ['diplomatic_events'],
-            dependsOn: null,
-            maxDelay: 5
+    async function waitForModule(moduleName, maxWait = 5000) {
+        const start = Date.now();
+        while (!window[moduleName] && (Date.now() - start) < maxWait) {
+            await new Promise(r => setTimeout(r, 100));
         }
+        if (!window[moduleName]) {
+            console.error(`[HTYQ] 模块 ${moduleName} 未加载`);
+            return null;
+        }
+        return window[moduleName];
+    }
+
+    async function getApi() {
+        return await waitForModule('HTYQ_EVOLUTION_API');
+    }
+
+    async function getPrompt() {
+        return await waitForModule('HTYQ_EVOLUTION_PROMPT');
+    }
+
+    const FIELD_GROUPS = {
+        core: { fields: ['world_time','world_digest','overall_atmosphere','driving_event','citizen_mood','security_status','astrology','direct_layer','near_layer','far_layer','upcoming_schedules','reputation','reputation_change','rumors','events'], dependsOn: null, maxDelay: 0 },
+        economy: { fields: ['economy'], dependsOn: 'economy', maxDelay: 1 },
+        factions: { fields: ['factions','faction_relations'], dependsOn: 'group_dynamics', maxDelay: 2 },
+        characters: { fields: ['character_states'], dependsOn: null, maxDelay: 2 },
+        causal: { fields: ['causal_chain','recent_actions','memory_summary'], dependsOn: null, maxDelay: 3 },
+        random: { fields: ['random_events'], dependsOn: null, maxDelay: 1 },
+        power: { fields: ['power_peaks'], dependsOn: 'power_peak', maxDelay: 3 },
+        internal: { fields: ['internal_messages'], dependsOn: 'group_relation', maxDelay: 2 },
+        blackmarket: { fields: ['blackMarket','accidents'], dependsOn: 'blackmarket', maxDelay: 3 },
+        secret: { fields: ['secret_box'], dependsOn: 'secret_asset', maxDelay: 4 },
+        memos: { fields: ['pending_foreshadowing','key_values_memo','round_focus','cross_region_memo','blood_feud_memo'], dependsOn: null, maxDelay: 4 },
+        diplomatic: { fields: ['diplomatic_events'], dependsOn: null, maxDelay: 5 }
     };
 
-    // 获取当前轮需要推演的组列表
     function getGroupsToEvolve() {
         const enabledDlcs = STATE.globalApiSettings.enabledDlcs || {};
         const last = STATE.worldState.lastUpdated || {};
@@ -100,13 +63,18 @@ window.HTYQ_EVOLUTION_STRATEGY = (function() {
         return groupsToEvolve;
     }
 
-    // 单次推演
     async function singleCallEvolution(manual) {
+        const api = await getApi();
+        if (!api) throw new Error('API模块不可用');
         await api.attemptEvolution(manual);
     }
 
-    // 两次调用：核心 + 扩展组合
     async function twoPassEvolution(manual) {
+        const api = await getApi();
+        const promptBuilder = await getPrompt();
+        if (!api) throw new Error('API模块不可用');
+        if (!promptBuilder) throw new Error('Prompt模块不可用');
+
         const corePrompt = await promptBuilder.buildCorePrompt();
         if (!corePrompt) throw new Error('构建核心 prompt 失败');
         const coreResult = await api.callRawAPI(corePrompt, '核心推演');
@@ -123,8 +91,12 @@ window.HTYQ_EVOLUTION_STRATEGY = (function() {
         }
     }
 
-    // 自定义多次调用
     async function customStepEvolution(manual, maxSteps) {
+        const api = await getApi();
+        const promptBuilder = await getPrompt();
+        if (!api) throw new Error('API模块不可用');
+        if (!promptBuilder) throw new Error('Prompt模块不可用');
+
         let groups = getGroupsToEvolve();
         const hasCore = groups.includes('core');
         if (!hasCore) groups.unshift('core');
@@ -144,7 +116,6 @@ window.HTYQ_EVOLUTION_STRATEGY = (function() {
         }
     }
 
-    // 主入口：根据策略选择调用方式
     async function runWithStrategy(manual = false) {
         const strategy = STATE.globalApiSettings.evolutionStrategy || 'single';
         if (strategy === 'single') {
