@@ -265,10 +265,11 @@
             'ui/settings/htyq-ui-settings-helpers.js',
             'ui/settings/htyq-ui-settings-worldbook.js',
             'ui/settings/htyq-ui-settings-core.js',
-            'ui/htyq-ui-settings.js',   // 入口文件
+            'ui/htyq-ui-settings.js',
             'ui/htyq-ui-core.js',
-            // Evolution 子模块
+            // Evolution 子模块（注意顺序：core -> strategy -> prompt -> api -> main）
             'evolution/htyq-evolution-core.js',
+            'evolution/htyq-evolution-strategy.js',   // 新增
             'evolution/htyq-evolution-prompt.js',
             'evolution/htyq-evolution-api.js',
             'evolution/htyq-evolution-main.js'
@@ -277,7 +278,6 @@
             for (const mod of modules) {
                 await loadScript(`${baseUrl}/${mod}`);
             }
-            // 加载保存的全局设置和世界状态，再构建UI
             if (window.HTYQ_STATE) {
                 window.HTYQ_STATE.loadGlobalSettings();
                 window.HTYQ_STATE.loadWorldState();
