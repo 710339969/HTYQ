@@ -34,7 +34,19 @@ window.__HTYQ_UI_SETTINGS_CORE = (function() {
                 <div id="htyq-poll-interval-group" style="display: ${set.autoPollMode === 'auto' ? 'block' : 'none'}; margin-left:20px;">
                     每 <input type="number" id="htyq-poll-interval" value="${set.autoPollInterval}" min="1" style="width:70px;"> 轮推演一次
                 </div>
-                <button id="htyq-save-engine" class="htyq-small-btn">保存引擎设置</button>
+                <!-- 推演调用策略选项 - 新增 -->
+                <div class="htyq-option-row" style="margin-top:12px;">
+                    <label style="margin-right: 8px;">📞 推演调用策略：</label>
+                    <select id="htyq-evo-strategy" style="background:#0f172a; color:#e2e8f0; border:1px solid #334155; border-radius:6px; padding:4px 8px;">
+                        <option value="single">一次性调用（省token，兼容模式）</option>
+                        <option value="two_pass">两次调用（核心+扩展）</option>
+                        <option value="custom">自定义多次调用</option>
+                    </select>
+                </div>
+                <div id="htyq-custom-steps-group" style="display: none; margin-left: 24px; margin-top: 8px;">
+                    每轮最多调用 <input type="number" id="htyq-custom-steps" value="${set.customSteps || 3}" min="1" max="10" style="width:70px; background:#0f172a; color:white; border:1px solid #334155; border-radius:4px; padding:4px;"> 次API（按分组顺序）
+                </div>
+                <button id="htyq-save-engine" class="htyq-small-btn" style="margin-top:12px;">保存引擎设置</button>
             </div>
 
             <!-- 世界书导入管理器 -->
@@ -149,7 +161,7 @@ window.__HTYQ_UI_SETTINGS_CORE = (function() {
                 utils.showFloatingWarning('API设置已保存', false);
             });
         }
-        // 保存引擎设置
+        // 保存引擎设置（包含新增的策略）
         const saveEngineBtn = container.querySelector('#htyq-save-engine');
         if (saveEngineBtn) {
             saveEngineBtn.addEventListener('click', () => {
@@ -157,6 +169,11 @@ window.__HTYQ_UI_SETTINGS_CORE = (function() {
                 set.autoPollMode = container.querySelector('#htyq-auto-poll')?.checked ? 'auto' : 'manual';
                 const interval = container.querySelector('#htyq-poll-interval');
                 if (interval) set.autoPollInterval = parseInt(interval.value) || 1;
+                // 新增策略
+                const strategySelect = container.querySelector('#htyq-evo-strategy');
+                if (strategySelect) set.evolutionStrategy = strategySelect.value;
+                const customStepsInput = container.querySelector('#htyq-custom-steps');
+                if (customStepsInput) set.customSteps = parseInt(customStepsInput.value) || 3;
                 STATE.saveGlobalSettings();
                 utils.showFloatingWarning('引擎设置已保存', false);
             });
@@ -252,6 +269,21 @@ window.__HTYQ_UI_SETTINGS_CORE = (function() {
         // 初始化世界书列表
         const listContainer = container.querySelector('#htyq-worlds-list');
         if (listContainer) worldbook.renderWorldList(listContainer, STATE.worldState, () => {});
+
+        // ========== 新增：策略下拉框初始化与联动 ==========
+        const strategySelect = container.querySelector('#htyq-evo-strategy');
+        const customStepsGroup = container.querySelector('#htyq-custom-steps-group');
+        if (strategySelect && customStepsGroup) {
+            // 设置当前值
+            strategySelect.value = set.evolutionStrategy || 'single';
+            const toggleCustom = () => {
+                customStepsGroup.style.display = strategySelect.value === 'custom' ? 'block' : 'none';
+            };
+            strategySelect.addEventListener('change', toggleCustom);
+            toggleCustom();
+        }
+        const customStepsInput = container.querySelector('#htyq-custom-steps');
+        if (customStepsInput) customStepsInput.value = set.customSteps || 3;
     }
 
     return { render };
