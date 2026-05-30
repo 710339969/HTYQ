@@ -1,4 +1,4 @@
-// 悬浮地球面板 - 修复模块加载顺序（串行加载）
+// 悬浮地球面板 - 完整版（含拆分后的设置模块）
 (function() {
     if (window.__FLOATING_GLOBE_LOADED__) return;
     window.__FLOATING_GLOBE_LOADED__ = true;
@@ -261,8 +261,11 @@
             'ui/htyq-ui-causal.js',
             'ui/htyq-ui-diplomacy.js',
             'ui/htyq-ui-memos.js',
+            // 设置子模块（按依赖顺序）
+            'ui/settings/htyq-ui-settings-helpers.js',
+            'ui/settings/htyq-ui-settings-worldbook.js',
+            'ui/settings/htyq-ui-settings-core.js',
             'ui/htyq-ui-settings.js',
-            'ui/htyq-ui-core.js',
             // Evolution 子模块
             'evolution/htyq-evolution-core.js',
             'evolution/htyq-evolution-prompt.js',
@@ -273,7 +276,7 @@
             for (const mod of modules) {
                 await loadScript(`${baseUrl}/${mod}`);
             }
-            // 【修改1】先加载保存的全局设置和世界状态，再构建UI
+            // 加载保存的全局设置和世界状态，再构建UI
             if (window.HTYQ_STATE) {
                 window.HTYQ_STATE.loadGlobalSettings();
                 window.HTYQ_STATE.loadWorldState();
