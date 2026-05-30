@@ -1,4 +1,4 @@
-// 设置页面渲染模块 - 完整版（修复自动导入时删除失效世界书）
+// 设置页面渲染模块 - 完整版（支持自动同步、来源标记、全选删除，修复清理失效世界书）
 window.HTYQ_UI_SETTINGS = (function() {
     const STATE = window.HTYQ_STATE;
     const utils = window.HTYQ_UTILS;
@@ -93,9 +93,9 @@ window.HTYQ_UI_SETTINGS = (function() {
             return await importToHtyq(worldName, textContent, silent, source);
         }
 
-        // 【核心修复】自动导入当前激活的世界书，同时删除已失效的自动导入世界书
+        // ========== 【修复点】自动导入激活的世界书（同时清理失效的） ==========
         async function autoImportActiveWorldbooks() {
-            // 1. 获取当前所有激活的世界书（角色绑定 + 全局启用）
+            // 1. 获取当前所有激活的世界书
             const activeBooks = await getActiveWorldbooks();
             const activeNames = new Set(activeBooks.map(b => b.name));
 
@@ -114,6 +114,10 @@ window.HTYQ_UI_SETTINGS = (function() {
             }
 
             // 3. 导入（或更新）当前激活的世界书
+            if (activeBooks.length === 0) {
+                utils.showFloatingWarning('未检测到任何激活的世界书（角色绑定或全局启用）', true);
+                return;
+            }
             let success = 0;
             for (const book of activeBooks) {
                 const source = book.source === 'character' ? 'character' : 'global';
@@ -452,7 +456,7 @@ window.HTYQ_UI_SETTINGS = (function() {
                 </div>
                 <div style="margin-top:12px; font-size:12px; color:#fbbf24;">
                     💡 提示：<br>
-                    - 「自动导入激活的世界书」：自动检测当前角色绑定和全局启用的世界书，同步导入（自动删除已失效的）。<br>
+                    - 「自动导入激活的世界书」：自动检测当前角色绑定和全局启用的世界书，并导入（标记为自动）。<br>
                     - 「手动选择世界书」：从所有世界书中选择，可导入整本或选择特定条目（标记为手动）。<br>
                     - 切换角色/聊天时，会自动清理旧的角色/全局世界书，并重新导入新的。<br>
                     - 支持多选世界书后点击「删除选中」批量删除。<br>
