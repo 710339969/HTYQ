@@ -92,6 +92,7 @@ window.HTYQ_UI = (function() {
             <div class="htyq-view" id="htyq-view-settings"></div>
             <div class="htyq-footer">
                 <button id="htyq-evolve-btn" class="htyq-evolve-btn">🌀 手动推演一轮</button>
+                <button id="htyq-refresh-btn" class="htyq-small-btn" style="background:#3b82f6;">🔄 刷新面板</button>
                 <div class="htyq-stats">轮次: <span id="htyq-round">0</span> | 货币: <span id="htyq-currency">0 未定义</span></div>
             </div>
         `;
@@ -101,6 +102,16 @@ window.HTYQ_UI = (function() {
             if (window.HTYQ_EVOLUTION && window.HTYQ_EVOLUTION.runEvolution) window.HTYQ_EVOLUTION.runEvolution(true);
             else utils.showFloatingWarning('推演模块未就绪，请刷新页面', true);
         });
+
+        // 手动刷新按钮
+        const refreshBtn = document.getElementById('htyq-refresh-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => {
+                STATE.loadWorldState();
+                refresh();
+                utils.showFloatingWarning('已重新加载当前聊天的世界状态', false);
+            });
+        }
 
         const tabBtns = container.querySelectorAll('.htyq-tab-btn');
         const views = container.querySelectorAll('.htyq-view');
