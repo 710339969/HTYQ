@@ -1,4 +1,4 @@
-// 状态管理模块
+// 状态管理模块 - 使用 ST extensionSettings 持久化，世界书列表全局存储
 window.HTYQ_STATE = (function() {
     const DEFAULT_DLCS = {
         world_engine: true,
@@ -14,6 +14,21 @@ window.HTYQ_STATE = (function() {
         secret_asset: true
     };
 
+    // 默认 API 设置
+    const DEFAULT_API_SETTINGS = {
+        apiMode: 'tavern',
+        customUrl: '',
+        customKey: '',
+        customModel: '',
+        autoInject: true,
+        autoPollMode: 'auto',
+        autoPollInterval: 1,
+        enabledDlcs: { ...DEFAULT_DLCS },
+        injectWorldInfo: true,
+        worldInfoMaxChars: 2000,
+        customWorldInfo: ''
+    };
+
     function getDefaultWorldState() {
         return {
             round: 0,
@@ -26,19 +41,19 @@ window.HTYQ_STATE = (function() {
             rumors: [],
             reputation: { jianghu: '默默无闻', official: '默默无闻', folk: '默默无闻', underworld: '默默无闻' },
             economy: { 
-                currencyName: null,        // 货币名称，如"金币"、"灵石"、"信用点"
-                currencyAmount: null,      // 玩家持有数量
-                marketTrend: '平稳', 
-                keyResources: [], 
-                fundsStatus: '尚未定义',    // 自然语言描述
-                economyVisibility: { behavior: '', visible: false, witnesses: [], rumorGenerated: false } 
+                currencyName: null,
+                currencyAmount: null,
+                marketTrend: '平稳',
+                keyResources: [],
+                fundsStatus: '尚未定义',
+                economyVisibility: { behavior: '', visible: false, witnesses: [], rumorGenerated: false }
             },
             blackMarket: [],
             secretBox: { actions: [], assets: [] },
             accidentCooldown: 0,
             noContactCounter: 0,
             breaker: 0,
-            manualWorlds: [],        // 新结构：[{ name, enabled, entries: [{title, content}] }]
+            manualWorlds: [],   // 全局世界书列表，单独存储
             worldTime: '',
             overallAtmosphere: '',
             drivingEvent: '',
@@ -66,37 +81,81 @@ window.HTYQ_STATE = (function() {
         };
     }
 
-    let globalApiSettings = {
-        apiMode: 'tavern',
-        customUrl: '',
-        customKey: '',
-        customModel: '',
-        autoInject: true,
-        autoPollMode: 'auto',
-        autoPollInterval: 1,
-        enabledDlcs: { ...DEFAULT_DLCS },
-        injectWorldInfo: true,
-        worldInfoMaxChars: 2000,
-        customWorldInfo: ''
-    };
-
+    // 全局变量
+    let globalApiSettings = { ...DEFAULT_API_SETTINGS };
     let worldState = getDefaultWorldState();
 
-    function getCurrentChatId() {
-        try {
-            const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : getContext();
-            return ctx.chatId || 'default';
-        } catch(e) { return 'default'; }
+    // 获取 ST Context
+    function getContext() {
+        if (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) return SillyTavern.getContext();
+        if (typeof getContext === 'function') return getContext();
+        return null;
     }
 
+    // 保存全局 API 设置到 extensionSettings
+    function saveGlobalSettings() {
+        const ctx = getContext();
+        if (ctx && ctx.extensionSettings) {
+            ctx.extensionSettings.htyq = {
+                apiSettings: globalApiSettings
+            };
+            // 尝试保存设置
+            if (typeof ctx.saveSettingsDebounced === 'function') {
+                ctx.saveSettingsDebounced();
+            } else if (typeof ctx.saveSettings === 'function') {
+                ctx.saveSettings();
+            } else {
+                // 降级到 localStorage
+                localStorage.setItem('htyq_global_settings', JSON.stringify(globalApiSettings));
+            }
+        } else {
+            // 降级到 localStorage
+            localStorage.setItem('htyq_global_settings', JSON.stringify(globalApiSettings));
+        }
+    }
+
+    // 加载全局 API 设置
+    function loadGlobalSettings() {
+        const ctx = getContext();
+        let loaded = false;
+        // 优先从 extensionSettings 读取
+        if (ctx && ctx.extensionSettings && ctx.extensionSettings.htyq) {
+            const saved = ctx.extensionSettings.htyq.apiSettings;
+            if (saved) {
+                globalApiSettings = { ...DEFAULT_API_SETTINGS, ...saved };
+                loaded = true;
+            }
+        }
+        // 如果没读到，尝试从 localStorage 读取（兼容旧版）
+        if (!loaded) {
+            const stored = localStorage.getItem('htyq_global_settings');
+            if (stored) {
+                try {
+                    const parsed = JSON.parse(stored);
+                    globalApiSettings = { ...DEFAULT_API_SETTINGS, ...parsed };
+                    loaded = true;
+                } catch(e) {}
+            }
+        }
+        if (!loaded) {
+            globalApiSettings = { ...DEFAULT_API_SETTINGS };
+        }
+        // 确保 DLC 默认值
+        if (!globalApiSettings.enabledDlcs) {
+            globalApiSettings.enabledDlcs = { ...DEFAULT_DLCS };
+        } else {
+            globalApiSettings.enabledDlcs = { ...DEFAULT_DLCS, ...globalApiSettings.enabledDlcs };
+        }
+    }
+
+    // 保存世界状态（全局 localStorage）
     function saveWorldState() {
-        const chatId = getCurrentChatId();
-        localStorage.setItem(`htyq_world_${chatId}`, JSON.stringify(worldState));
+        localStorage.setItem('htyq_world_global', JSON.stringify(worldState));
     }
 
+    // 加载世界状态
     function loadWorldState() {
-        const chatId = getCurrentChatId();
-        const stored = localStorage.getItem(`htyq_world_${chatId}`);
+        const stored = localStorage.getItem('htyq_world_global');
         if (stored) {
             try {
                 const parsed = JSON.parse(stored);
@@ -105,48 +164,16 @@ window.HTYQ_STATE = (function() {
                 for (let key in defaults) {
                     if (worldState[key] === undefined) worldState[key] = defaults[key];
                 }
-                // 兼容旧数据：如果存在 userGold，迁移到新的货币结构
-                if (parsed.economy && typeof parsed.economy.userGold === 'number' && !parsed.economy.currencyName) {
-                    worldState.economy.currencyName = '金币';
-                    worldState.economy.currencyAmount = parsed.economy.userGold;
-                    worldState.economy.fundsStatus = '手头宽裕';
-                    delete worldState.economy.userGold;
-                }
-                if (!worldState.economy.currencyName) worldState.economy.currencyName = null;
-                if (worldState.economy.currencyAmount === undefined) worldState.economy.currencyAmount = null;
-                if (!worldState.economy.fundsStatus) worldState.economy.fundsStatus = '尚未定义';
-                if (!worldState.economy.economyVisibility) worldState.economy.economyVisibility = defaults.economy.economyVisibility;
                 if (!worldState.manualWorlds) worldState.manualWorlds = [];
-                // 兼容旧结构：如果旧数据是 content 格式，尝试转换为 entries
-                if (worldState.manualWorlds.length && worldState.manualWorlds[0].content && !worldState.manualWorlds[0].entries) {
-                    worldState.manualWorlds = worldState.manualWorlds.map(w => ({
-                        name: w.name,
-                        enabled: w.enabled !== false,
-                        entries: [{ title: '世界书内容', content: w.content || '' }]
-                    }));
-                    saveWorldState();
-                }
             } catch(e) { worldState = getDefaultWorldState(); }
         } else {
             worldState = getDefaultWorldState();
         }
     }
 
-    function saveGlobalSettings() {
-        localStorage.setItem('htyq_global_settings', JSON.stringify(globalApiSettings));
-    }
-
-    function loadGlobalSettings() {
-        const stored = localStorage.getItem('htyq_global_settings');
-        if (stored) {
-            try {
-                const parsed = JSON.parse(stored);
-                globalApiSettings = { ...globalApiSettings, ...parsed };
-                if (globalApiSettings.enabledDlcs) {
-                    globalApiSettings.enabledDlcs = { ...DEFAULT_DLCS, ...globalApiSettings.enabledDlcs };
-                }
-            } catch(e) {}
-        }
+    function getCurrentChatId() {
+        const ctx = getContext();
+        return ctx?.chatId || 'default';
     }
 
     function addChronicle(type, title, content) {
@@ -164,8 +191,8 @@ window.HTYQ_STATE = (function() {
     return {
         DEFAULT_DLCS,
         getDefaultWorldState,
-        globalApiSettings,
-        worldState,
+        get globalApiSettings() { return globalApiSettings; },
+        get worldState() { return worldState; },
         getCurrentChatId,
         saveWorldState,
         loadWorldState,
