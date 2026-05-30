@@ -14,7 +14,6 @@ window.HTYQ_EVOLUTION_API = (function() {
     let currentRetry = 0;
     let floatingToast = null;
 
-    // 提示框位置改为右上角（top: 20px），避免遮挡手机端输入框
     function showPersistentToast(text, isError = false, duration = null) {
         if (floatingToast && floatingToast.parentNode) floatingToast.remove();
         floatingToast = document.createElement('div');
@@ -44,6 +43,48 @@ window.HTYQ_EVOLUTION_API = (function() {
     function hidePersistentToast() {
         if (floatingToast && floatingToast.parentNode) floatingToast.remove();
         floatingToast = null;
+    }
+
+    // 新增：原始 API 调用，不经过重试，返回解析后的 JSON 对象
+    async function callRawAPI(prompt, logTag = '') {
+        try {
+            console.log(`${logTag} Prompt 长度:`, prompt.length);
+            let rawResult;
+            const settings = STATE.globalApiSettings;
+            if (settings.apiMode === 'custom' && settings.customUrl) {
+                const response = await fetch(getCustomApiUrl(settings.customUrl), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${settings.customKey}` },
+                    body: JSON.stringify({
+                        model: settings.customModel || 'gpt-3.5-turbo',
+                        messages: [
+                            { role: 'system', content: '你是活体世界引擎，只返回纯净JSON，不要包含任何额外解释。' },
+                            { role: 'user', content: prompt }
+                        ],
+                        temperature: 0.8
+                    })
+                });
+                if (!response.ok) throw new Error(`API HTTP ${response.status}`);
+                const data = await response.json();
+                rawResult = data.choices[0].message.content;
+            } else {
+                const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : getContext();
+                if (!ctx.generateRaw) throw new Error('当前环境不支持 generateRaw');
+                rawResult = await ctx.generateRaw({ prompt, max_tokens: 4000, temperature: 0.8, should_stream: false });
+                if (typeof rawResult !== 'string') rawResult = rawResult.text || String(rawResult);
+            }
+            console.log(`${logTag} 原始返回:`, rawResult);
+            let jsonStr = rawResult.trim().replace(/```json/g, '').replace(/```/g, '');
+            const firstBrace = jsonStr.indexOf('{');
+            const lastBrace = jsonStr.lastIndexOf('}');
+            if (firstBrace === -1 || lastBrace === -1) throw new Error('返回内容不包含有效的JSON对象');
+            jsonStr = jsonStr.substring(firstBrace, lastBrace + 1);
+            const evolutionData = JSON.parse(jsonStr);
+            return evolutionData;
+        } catch (err) {
+            console.error(`${logTag} 调用失败:`, err);
+            return null;
+        }
     }
 
     async function attemptEvolution(manual) {
@@ -130,5 +171,5 @@ window.HTYQ_EVOLUTION_API = (function() {
         } catch(e) {}
     }
 
-    return { attemptEvolution, injectWorldSummaryToChat, showPersistentToast, hidePersistentToast };
+    return { attemptEvolution, injectWorldSummaryToChat, showPersistentToast, hidePersistentToast, callRawAPI };
 })();
