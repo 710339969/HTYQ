@@ -26,9 +26,8 @@ window.HTYQ_STATE = (function() {
         injectWorldInfo: true,
         worldInfoMaxChars: 2000,
         customWorldInfo: '',
-        // 新增：推演策略配置
-        evolutionStrategy: 'single',   // 'single', 'two_pass', 'custom'
-        customSteps: 3                 // 自定义步骤数
+        evolutionStrategy: 'single',   // 新增
+        customSteps: 3                 // 新增
     };
 
     function getDefaultWorldState() {
@@ -80,8 +79,7 @@ window.HTYQ_STATE = (function() {
             crossRegionMemo: '',
             bloodFeudMemo: '',
             reputationChange: '',
-            // 新增：记录每个字段最后更新的轮次
-            lastUpdated: {}
+            lastUpdated: {}   // 新增
         };
     }
 
@@ -175,7 +173,7 @@ window.HTYQ_STATE = (function() {
         if (!loaded) globalApiSettings = { ...DEFAULT_API_SETTINGS };
         if (!globalApiSettings.enabledDlcs) globalApiSettings.enabledDlcs = { ...DEFAULT_DLCS };
         else globalApiSettings.enabledDlcs = { ...DEFAULT_DLCS, ...globalApiSettings.enabledDlcs };
-        // 确保策略配置存在
+        // 确保新增字段存在
         if (globalApiSettings.evolutionStrategy === undefined) globalApiSettings.evolutionStrategy = 'single';
         if (globalApiSettings.customSteps === undefined) globalApiSettings.customSteps = 3;
     }
