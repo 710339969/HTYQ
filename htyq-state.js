@@ -26,8 +26,8 @@ window.HTYQ_STATE = (function() {
         injectWorldInfo: true,
         worldInfoMaxChars: 2000,
         customWorldInfo: '',
-        evolutionStrategy: 'single',   // 新增
-        customSteps: 3                 // 新增
+        evolutionStrategy: 'single',
+        customSteps: 3
     };
 
     function getDefaultWorldState() {
@@ -79,7 +79,7 @@ window.HTYQ_STATE = (function() {
             crossRegionMemo: '',
             bloodFeudMemo: '',
             reputationChange: '',
-            lastUpdated: {}   // 新增
+            lastUpdated: {}
         };
     }
 
@@ -92,28 +92,32 @@ window.HTYQ_STATE = (function() {
         return null;
     }
 
+    // 增强的聊天ID获取（从多个来源）
     function getCurrentChatId() {
         const ctx = getContext();
-        return ctx?.chatId || 'default';
+        if (ctx?.chatId && ctx.chatId !== 'default') return ctx.chatId;
+        if (typeof chat_id !== 'undefined' && chat_id) return chat_id;
+        const urlParams = new URLSearchParams(window.location.search);
+        const chatParam = urlParams.get('chat');
+        if (chatParam) return chatParam;
+        return 'default';
     }
 
     function saveWorldState() {
         const chatId = getCurrentChatId();
-        if (chatId) {
+        if (chatId && chatId !== 'default') {
             localStorage.setItem(`htyq_world_${chatId}`, JSON.stringify(worldState));
         } else {
             localStorage.setItem('htyq_world_global', JSON.stringify(worldState));
         }
     }
 
+    // 核心修复：不再 fallback 到 global，新聊天直接返回默认状态
     function loadWorldState(chatId) {
         const targetChatId = chatId || getCurrentChatId();
         let stored = null;
-        if (targetChatId) {
+        if (targetChatId && targetChatId !== 'default') {
             stored = localStorage.getItem(`htyq_world_${targetChatId}`);
-        }
-        if (!stored) {
-            stored = localStorage.getItem('htyq_world_global');
         }
         if (stored) {
             try {
@@ -124,11 +128,14 @@ window.HTYQ_STATE = (function() {
                 if (!worldState.manualWorlds) worldState.manualWorlds = [];
                 worldState.manualWorlds = worldState.manualWorlds.map(w => ({ source: 'manual', ...w }));
                 if (!worldState.lastUpdated) worldState.lastUpdated = {};
-            } catch(e) { worldState = getDefaultWorldState(); }
+            } catch(e) {
+                console.error('[HTYQ] 解析存储失败，使用默认状态', e);
+                worldState = getDefaultWorldState();
+            }
         } else {
             worldState = getDefaultWorldState();
+            console.log('[HTYQ] 新聊天，初始化默认世界状态');
         }
-        saveWorldState();
         return worldState;
     }
 
@@ -173,7 +180,6 @@ window.HTYQ_STATE = (function() {
         if (!loaded) globalApiSettings = { ...DEFAULT_API_SETTINGS };
         if (!globalApiSettings.enabledDlcs) globalApiSettings.enabledDlcs = { ...DEFAULT_DLCS };
         else globalApiSettings.enabledDlcs = { ...DEFAULT_DLCS, ...globalApiSettings.enabledDlcs };
-        // 确保新增字段存在
         if (globalApiSettings.evolutionStrategy === undefined) globalApiSettings.evolutionStrategy = 'single';
         if (globalApiSettings.customSteps === undefined) globalApiSettings.customSteps = 3;
     }
