@@ -25,7 +25,10 @@ window.HTYQ_STATE = (function() {
         enabledDlcs: { ...DEFAULT_DLCS },
         injectWorldInfo: true,
         worldInfoMaxChars: 2000,
-        customWorldInfo: ''
+        customWorldInfo: '',
+        // 新增：推演策略配置
+        evolutionStrategy: 'single',   // 'single', 'two_pass', 'custom'
+        customSteps: 3                 // 自定义步骤数
     };
 
     function getDefaultWorldState() {
@@ -52,7 +55,7 @@ window.HTYQ_STATE = (function() {
             accidentCooldown: 0,
             noContactCounter: 0,
             breaker: 0,
-            manualWorlds: [],   // 每个元素: { name, enabled, content, source }
+            manualWorlds: [],
             worldTime: '',
             overallAtmosphere: '',
             drivingEvent: '',
@@ -76,7 +79,9 @@ window.HTYQ_STATE = (function() {
             roundFocus: '',
             crossRegionMemo: '',
             bloodFeudMemo: '',
-            reputationChange: ''
+            reputationChange: '',
+            // 新增：记录每个字段最后更新的轮次
+            lastUpdated: {}
         };
     }
 
@@ -94,7 +99,6 @@ window.HTYQ_STATE = (function() {
         return ctx?.chatId || 'default';
     }
 
-    // 保存当前聊天的世界状态（按chatId隔离）
     function saveWorldState() {
         const chatId = getCurrentChatId();
         if (chatId) {
@@ -104,7 +108,6 @@ window.HTYQ_STATE = (function() {
         }
     }
 
-    // 加载指定聊天（或当前聊天）的世界状态
     function loadWorldState(chatId) {
         const targetChatId = chatId || getCurrentChatId();
         let stored = null;
@@ -122,16 +125,15 @@ window.HTYQ_STATE = (function() {
                 for (let key in defaults) if (worldState[key] === undefined) worldState[key] = defaults[key];
                 if (!worldState.manualWorlds) worldState.manualWorlds = [];
                 worldState.manualWorlds = worldState.manualWorlds.map(w => ({ source: 'manual', ...w }));
+                if (!worldState.lastUpdated) worldState.lastUpdated = {};
             } catch(e) { worldState = getDefaultWorldState(); }
         } else {
             worldState = getDefaultWorldState();
         }
-        // 确保保存回正确的key
         saveWorldState();
         return worldState;
     }
 
-    // 重置当前聊天的世界状态
     function resetCurrentWorld() {
         worldState = getDefaultWorldState();
         saveWorldState();
@@ -173,6 +175,9 @@ window.HTYQ_STATE = (function() {
         if (!loaded) globalApiSettings = { ...DEFAULT_API_SETTINGS };
         if (!globalApiSettings.enabledDlcs) globalApiSettings.enabledDlcs = { ...DEFAULT_DLCS };
         else globalApiSettings.enabledDlcs = { ...DEFAULT_DLCS, ...globalApiSettings.enabledDlcs };
+        // 确保策略配置存在
+        if (globalApiSettings.evolutionStrategy === undefined) globalApiSettings.evolutionStrategy = 'single';
+        if (globalApiSettings.customSteps === undefined) globalApiSettings.customSteps = 3;
     }
 
     function addChronicle(type, title, content) {
