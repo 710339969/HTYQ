@@ -273,6 +273,12 @@
             for (const mod of modules) {
                 await loadScript(`${baseUrl}/${mod}`);
             }
+            // 【修改1】先加载保存的全局设置和世界状态，再构建UI
+            if (window.HTYQ_STATE) {
+                window.HTYQ_STATE.loadGlobalSettings();
+                window.HTYQ_STATE.loadWorldState();
+                console.log('已加载全局设置与世界状态');
+            }
             if (window.HTYQ_UI && window.HTYQ_UI.buildUI) {
                 window.HTYQ_UI.buildUI();
                 console.log('活体引擎UI已构建');
@@ -281,17 +287,21 @@
             }
             if (window.HTYQ_EVOLUTION && window.HTYQ_EVOLUTION.start) {
                 window.HTYQ_EVOLUTION.start();
+                console.log('活体引擎已启动');
             }
             window.__HTYQ_ENGINE_LOADED__ = true;
         } catch (err) {
             console.error('模块加载失败:', err);
-            document.getElementById('htyq-panel-content').innerHTML = `
-                <div style="padding:20px;color:red;">
-                    <strong>模块加载失败</strong><br>
-                    ${err.message}<br>
-                    请检查控制台并刷新页面。
-                </div>
-            `;
+            const contentDiv = document.getElementById('htyq-panel-content');
+            if (contentDiv) {
+                contentDiv.innerHTML = `
+                    <div style="padding:20px;color:red;">
+                        <strong>模块加载失败</strong><br>
+                        ${err.message}<br>
+                        请检查控制台并刷新页面。
+                    </div>
+                `;
+            }
         }
     }
 
