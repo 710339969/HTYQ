@@ -3,16 +3,16 @@ window.HTYQ_EVOLUTION = (function() {
     const STATE = window.HTYQ_STATE;
     const utils = window.HTYQ_UTILS;
     const api = window.HTYQ_EVOLUTION_API;
+    const strategy = window.HTYQ_EVOLUTION_STRATEGY;
 
     let isEvolving = false;
-    let hasFirstResponse = false;  // 记录当前聊天是否已经收到过AI回复
+    let hasFirstResponse = false;
 
     async function runEvolution(manual = false) {
         if (isEvolving) {
             utils.showFloatingWarning('推演进行中，请稍后', true);
             return;
         }
-        // 自动推演时，如果还没有过第一次回复，则跳过
         if (!manual && !hasFirstResponse) {
             console.log('[HTYQ] 首轮对话尚未完成，跳过自动推演');
             return;
@@ -20,7 +20,7 @@ window.HTYQ_EVOLUTION = (function() {
         isEvolving = true;
         api.showPersistentToast('🌍 世界演化中...', false);
         try {
-            await api.attemptEvolution(manual);
+            await strategy.runWithStrategy(manual);
         } catch (err) {
             console.error('推演彻底失败:', err);
             api.hidePersistentToast();
@@ -30,7 +30,6 @@ window.HTYQ_EVOLUTION = (function() {
         }
     }
 
-    // 自动同步世界书（清理旧+导入新）
     async function syncWorldbooks() {
         console.log('[HTYQ] 开始同步世界书...');
         const deletedCount = STATE.clearWorldsBySource(['character', 'global']);
@@ -39,7 +38,6 @@ window.HTYQ_EVOLUTION = (function() {
         const ctx = SillyTavern.getContext();
         const activeWorlds = [];
 
-        // 角色绑定世界书
         try {
             const char = ctx.characters?.[ctx.characterId];
             const charWorld = char?.data?.extensions?.world;
@@ -55,7 +53,6 @@ window.HTYQ_EVOLUTION = (function() {
             }
         } catch(e) { console.warn('读取角色世界书失败', e); }
 
-        // 全局启用的世界书
         try {
             const headers = ctx.getRequestHeaders ? ctx.getRequestHeaders() : {};
             const resp = await fetch('/api/settings/get', {
@@ -123,11 +120,9 @@ window.HTYQ_EVOLUTION = (function() {
     }
 
     function onChatLoaded() {
-        // 加载当前聊天的世界状态
         STATE.loadWorldState();
         hasFirstResponse = false;
         autoPollCounter = 0;
-        // 自动同步世界书（清理旧+导入新）
         syncWorldbooks().catch(console.warn);
         if (window.HTYQ_UI && window.HTYQ_UI.refresh) window.HTYQ_UI.refresh();
         if (STATE.globalApiSettings.autoInject) api.injectWorldSummaryToChat();
@@ -164,7 +159,7 @@ window.HTYQ_EVOLUTION = (function() {
 
     function start() {
         STATE.loadGlobalSettings();
-        STATE.loadWorldState();  // 加载当前聊天的世界状态
+        STATE.loadWorldState();
         bindEvents();
         syncWorldbooks().catch(console.warn);
         if (STATE.globalApiSettings.autoInject) api.injectWorldSummaryToChat();
