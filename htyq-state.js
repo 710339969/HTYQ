@@ -1,4 +1,4 @@
-// 状态管理模块 - 增加世界书来源管理
+// 状态管理模块 - 增加世界书来源管理，全局存储
 window.HTYQ_STATE = (function() {
     const DEFAULT_DLCS = {
         world_engine: true,
