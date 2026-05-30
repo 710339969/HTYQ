@@ -42,10 +42,10 @@ window.HTYQ_EVOLUTION = (function() {
             await strategy.runWithStrategy(manual);
         } catch (err) {
             console.error('推演彻底失败:', err);
-            api.hidePersistentToast();
             utils.showFloatingWarning(`推演彻底失败: ${err.message}，请检查控制台或手动重试`, true);
         } finally {
             isEvolving = false;
+            api.hidePersistentToast();   // 确保无论成功或失败都关闭 toast
         }
     }
 
