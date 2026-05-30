@@ -1,4 +1,4 @@
-// 设置页面渲染模块 - 支持自动导入激活的世界书（角色+全局），配置持久化
+// 设置页面渲染模块 - 完整版（支持自动同步、来源标记、全选删除）
 window.HTYQ_UI_SETTINGS = (function() {
     const STATE = window.HTYQ_STATE;
     const utils = window.HTYQ_UTILS;
@@ -14,7 +14,7 @@ window.HTYQ_UI_SETTINGS = (function() {
             const ctx = SillyTavern.getContext();
             const result = [];
 
-            // 1. 角色绑定世界书
+            // 角色绑定世界书
             try {
                 const char = ctx.characters?.[ctx.characterId];
                 const charWorld = char?.data?.extensions?.world;
@@ -30,7 +30,7 @@ window.HTYQ_UI_SETTINGS = (function() {
                 }
             } catch(e) { console.warn('读取角色世界书失败', e); }
 
-            // 2. 全局启用的世界书
+            // 全局启用的世界书
             try {
                 const headers = ctx.getRequestHeaders ? ctx.getRequestHeaders() : {};
                 const resp = await fetch('/api/settings/get', {
@@ -58,7 +58,6 @@ window.HTYQ_UI_SETTINGS = (function() {
             return result;
         }
 
-        // 将条目数组转换为文本
         function entriesToText(entries) {
             let text = '';
             for (const entry of entries) {
@@ -69,15 +68,15 @@ window.HTYQ_UI_SETTINGS = (function() {
             return text.trim();
         }
 
-        // 导入到活体引擎
-        async function importToHtyq(worldName, content, silent = false) {
+        async function importToHtyq(worldName, content, silent = false, source = 'manual') {
             const existing = worldState.manualWorlds.find(w => w.name === worldName);
             if (existing) {
                 if (!silent && !confirm(`世界书“${worldName}”已存在，是否覆盖？`)) return false;
                 existing.content = content;
                 existing.enabled = true;
+                existing.source = source;
             } else {
-                worldState.manualWorlds.push({ name: worldName, enabled: true, content });
+                worldState.manualWorlds.push({ name: worldName, enabled: true, content, source });
             }
             STATE.saveWorldState();
             if (!silent) utils.showFloatingWarning(`成功导入世界书“${worldName}”`, false);
@@ -85,17 +84,15 @@ window.HTYQ_UI_SETTINGS = (function() {
             return true;
         }
 
-        // 导入整本世界书（供自动导入调用）
-        async function importWholeWorldbook(worldName, entries, silent = false) {
+        async function importWholeWorldbook(worldName, entries, silent = false, source = 'manual') {
             if (!entries || !entries.length) {
                 if (!silent) utils.showFloatingWarning(`世界书“${worldName}”无有效内容`, true);
                 return false;
             }
             const textContent = entriesToText(entries);
-            return await importToHtyq(worldName, textContent, silent);
+            return await importToHtyq(worldName, textContent, silent, source);
         }
 
-        // 自动导入所有激活的世界书
         async function autoImportActiveWorldbooks() {
             const activeBooks = await getActiveWorldbooks();
             if (activeBooks.length === 0) {
@@ -104,7 +101,8 @@ window.HTYQ_UI_SETTINGS = (function() {
             }
             let success = 0;
             for (const book of activeBooks) {
-                if (await importWholeWorldbook(book.name, book.entries, true)) success++;
+                const source = book.source === 'character' ? 'character' : 'global';
+                if (await importWholeWorldbook(book.name, book.entries, true, source)) success++;
             }
             utils.showFloatingWarning(`自动导入完成：成功 ${success} / ${activeBooks.length}`, false);
         }
@@ -238,7 +236,7 @@ window.HTYQ_UI_SETTINGS = (function() {
             if (selectedWorld.type === 'whole') {
                 const data = await loadWorldbookContent(selectedWorld.name);
                 if (data && data.entries.length) {
-                    await importWholeWorldbook(selectedWorld.name, data.entries, false);
+                    await importWholeWorldbook(selectedWorld.name, data.entries, false, 'manual');
                 } else {
                     utils.showFloatingWarning(`世界书“${selectedWorld.name}”无有效内容`, true);
                 }
@@ -252,34 +250,98 @@ window.HTYQ_UI_SETTINGS = (function() {
                 if (!selectedEntries || selectedEntries.length === 0) return;
                 const customName = `${selectedWorld.name} (选中条目 ${selectedEntries.length})`;
                 const textContent = entriesToText(selectedEntries);
-                await importToHtyq(customName, textContent, false);
+                await importToHtyq(customName, textContent, false, 'manual');
             }
         }
 
-        // ========== 渲染世界书列表 ==========
+        // ========== 渲染世界书列表（支持多选和批量删除） ==========
+        let selectedIndices = new Set();
+
         function renderWorldList() {
             const listDiv = container.querySelector('#htyq-worlds-list');
             if (!listDiv) return;
             const worlds = worldState.manualWorlds;
             if (!worlds.length) {
                 listDiv.innerHTML = '<div style="color:#64748b; padding:12px; text-align:center;">暂无世界书，请从ST世界书导入</div>';
+                selectedIndices.clear();
                 return;
             }
-            listDiv.innerHTML = worlds.map((world, idx) => `
-                <div style="border:1px solid #334155; border-radius:8px; margin-bottom:12px; padding:12px; background:#1e2937;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <label style="display:flex; align-items:center; gap:8px;">
-                            <input type="checkbox" class="htyq-world-enable" data-index="${idx}" ${world.enabled !== false ? 'checked' : ''}>
-                            <strong>${escapeHtml(world.name)}</strong>
-                        </label>
-                        <div>
-                            <button class="htyq-test-world-btn" data-index="${idx}" style="background:#8b5cf6; border:none; color:white; border-radius:4px; padding:4px 10px; margin-right:6px; cursor:pointer;">🔍 测试</button>
-                            <button class="htyq-del-world-btn" data-index="${idx}" style="background:#ef4444; border:none; color:white; border-radius:4px; padding:4px 10px; cursor:pointer;">删除</button>
-                        </div>
-                    </div>
-                    <div style="font-size:12px; color:#94a3b8; margin-top:6px;">📄 内容长度：${world.content.length} 字符</div>
+
+            listDiv.innerHTML = `
+                <div style="margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
+                        <input type="checkbox" id="htyq-select-all-cb" ${selectedIndices.size === worlds.length ? 'checked' : ''}>
+                        <span style="font-size:12px;">全选</span>
+                    </label>
+                    <button id="htyq-batch-delete-btn" class="htyq-small-btn" style="background:#ef4444; padding:4px 10px;">🗑️ 删除选中</button>
                 </div>
-            `).join('');
+                <div id="htyq-worlds-container">
+                    ${worlds.map((world, idx) => `
+                        <div style="border:1px solid #334155; border-radius:8px; margin-bottom:12px; padding:12px; background:#1e2937;">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <div style="display:flex; align-items:center; gap:12px;">
+                                    <input type="checkbox" class="htyq-world-select" data-index="${idx}" ${selectedIndices.has(idx) ? 'checked' : ''}>
+                                    <label style="display:flex; align-items:center; gap:8px;">
+                                        <input type="checkbox" class="htyq-world-enable" data-index="${idx}" ${world.enabled !== false ? 'checked' : ''}>
+                                        <strong>${escapeHtml(world.name)}</strong>
+                                    </label>
+                                </div>
+                                <div>
+                                    <button class="htyq-test-world-btn" data-index="${idx}" style="background:#8b5cf6; border:none; color:white; border-radius:4px; padding:4px 10px; margin-right:6px; cursor:pointer;">🔍 测试</button>
+                                    <button class="htyq-del-world-btn" data-index="${idx}" style="background:#ef4444; border:none; color:white; border-radius:4px; padding:4px 10px; cursor:pointer;">删除</button>
+                                </div>
+                            </div>
+                            <div style="font-size:12px; color:#94a3b8; margin-top:6px;">📄 内容长度：${world.content.length} 字符</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+
+            const selectAllCb = listDiv.querySelector('#htyq-select-all-cb');
+            if (selectAllCb) {
+                selectAllCb.addEventListener('change', (e) => {
+                    const isChecked = e.target.checked;
+                    const selectCbs = listDiv.querySelectorAll('.htyq-world-select');
+                    if (isChecked) {
+                        for (let i = 0; i < worlds.length; i++) selectedIndices.add(i);
+                        selectCbs.forEach(cb => cb.checked = true);
+                    } else {
+                        selectedIndices.clear();
+                        selectCbs.forEach(cb => cb.checked = false);
+                    }
+                });
+            }
+
+            const selectCbs = listDiv.querySelectorAll('.htyq-world-select');
+            selectCbs.forEach(cb => {
+                cb.addEventListener('change', (e) => {
+                    const idx = parseInt(cb.dataset.index);
+                    if (e.target.checked) selectedIndices.add(idx);
+                    else selectedIndices.delete(idx);
+                    const allCb = listDiv.querySelector('#htyq-select-all-cb');
+                    if (allCb) allCb.checked = (selectedIndices.size === worlds.length);
+                });
+            });
+
+            const batchDeleteBtn = listDiv.querySelector('#htyq-batch-delete-btn');
+            if (batchDeleteBtn) {
+                batchDeleteBtn.addEventListener('click', () => {
+                    if (selectedIndices.size === 0) {
+                        utils.showFloatingWarning('没有选中任何世界书', true);
+                        return;
+                    }
+                    const names = Array.from(selectedIndices).map(i => worlds[i]?.name).filter(Boolean);
+                    if (!confirm(`确定删除选中的 ${selectedIndices.size} 个世界书吗？\n${names.join(', ')}`)) return;
+                    const sortedIndices = Array.from(selectedIndices).sort((a,b) => b - a);
+                    for (const idx of sortedIndices) worlds.splice(idx, 1);
+                    selectedIndices.clear();
+                    STATE.saveWorldState();
+                    renderWorldList();
+                    utils.showFloatingWarning(`已删除 ${sortedIndices.length} 个世界书`, false);
+                    const previewArea = container.querySelector('#htyq-world-preview');
+                    if (previewArea) previewArea.innerHTML = '<div style="color:#94a3b8; text-align:center; font-size:12px;">点击「测试」按钮，此处将显示世界书完整内容</div>';
+                });
+            }
 
             listDiv.querySelectorAll('.htyq-world-enable').forEach(cb => {
                 cb.addEventListener('change', (e) => {
@@ -318,8 +380,14 @@ window.HTYQ_UI_SETTINGS = (function() {
                     if (!isNaN(idx) && confirm('确定删除这个世界书吗？')) {
                         const name = worldState.manualWorlds[idx].name;
                         worldState.manualWorlds.splice(idx, 1);
-                        renderWorldList();
+                        const newSelected = new Set();
+                        for (let i of selectedIndices) {
+                            if (i < idx) newSelected.add(i);
+                            else if (i > idx) newSelected.add(i-1);
+                        }
+                        selectedIndices = newSelected;
                         STATE.saveWorldState();
+                        renderWorldList();
                         utils.showFloatingWarning(`已删除「${name}」`, false);
                         const previewArea = container.querySelector('#htyq-world-preview');
                         if (previewArea) previewArea.innerHTML = '';
@@ -369,9 +437,10 @@ window.HTYQ_UI_SETTINGS = (function() {
                 </div>
                 <div style="margin-top:12px; font-size:12px; color:#fbbf24;">
                     💡 提示：<br>
-                    - 「自动导入激活的世界书」：自动检测当前角色绑定和全局启用的世界书，并全部导入整本。<br>
-                    - 「手动选择世界书」：从所有世界书中选择，可导入整本或选择特定条目。<br>
-                    - 导入后的世界书会全局保存，切换对话或刷新浏览器不会丢失。<br>
+                    - 「自动导入激活的世界书」：自动检测当前角色绑定和全局启用的世界书，并导入（标记为自动）。<br>
+                    - 「手动选择世界书」：从所有世界书中选择，可导入整本或选择特定条目（标记为手动）。<br>
+                    - 切换角色/聊天时，会自动清理旧的角色/全局世界书，并重新导入新的。<br>
+                    - 支持多选世界书后点击「删除选中」批量删除。<br>
                     - 勾选「启用」后，该世界书的内容会在推演时被 AI 读取。<br>
                     - 点击「测试」可预览完整内容。
                 </div>
