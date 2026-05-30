@@ -190,12 +190,21 @@
         }
     }
 
+    // 修复：打开面板时强制同步世界状态
     function openPanel() {
         if (panelVisible) return;
         if (panel.offsetWidth === 0) initPanel();
         else clampPosition(panel, STORAGE_KEY_PANEL);
         panel.style.display = 'flex';
         panelVisible = true;
+        
+        // 强制重新加载当前聊天的世界状态并刷新UI
+        if (window.HTYQ_STATE && window.HTYQ_UI) {
+            window.HTYQ_STATE.loadWorldState();
+            window.HTYQ_UI.refresh();
+            console.log('[HTYQ] 面板打开时强制同步世界状态');
+        }
+        
         if (isMobile) {
             outsideClickListener = (e) => {
                 if (!panel.contains(e.target) && !globe.contains(e.target)) closePanel();
@@ -247,7 +256,6 @@
             'htyq-state.js',
             'htyq-rules.js',
             'htyq-utils.js',
-            // UI 子模块
             'ui/htyq-ui-dashboard.js',
             'ui/htyq-ui-chronicle.js',
             'ui/htyq-ui-events.js',
@@ -261,15 +269,13 @@
             'ui/htyq-ui-causal.js',
             'ui/htyq-ui-diplomacy.js',
             'ui/htyq-ui-memos.js',
-            // 设置模块（拆分版）
             'ui/settings/htyq-ui-settings-helpers.js',
             'ui/settings/htyq-ui-settings-worldbook.js',
             'ui/settings/htyq-ui-settings-core.js',
             'ui/htyq-ui-settings.js',
             'ui/htyq-ui-core.js',
-            // Evolution 子模块（注意顺序：core -> strategy -> prompt -> api -> main）
             'evolution/htyq-evolution-core.js',
-            'evolution/htyq-evolution-strategy.js',   // 新增
+            'evolution/htyq-evolution-strategy.js',
             'evolution/htyq-evolution-prompt.js',
             'evolution/htyq-evolution-api.js',
             'evolution/htyq-evolution-main.js'
