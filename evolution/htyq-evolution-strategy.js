@@ -53,7 +53,7 @@ window.HTYQ_EVOLUTION_STRATEGY = (function() {
             maxDelay: 2
         },
         blackmarket: {
-            fields: ['black_market', 'accidents'],
+            fields: ['blackMarket', 'accidents'],   // 修正：black_market → blackMarket
             dependsOn: 'blackmarket',
             maxDelay: 3
         },
