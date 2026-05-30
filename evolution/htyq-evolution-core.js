@@ -9,6 +9,15 @@ window.HTYQ_EVOLUTION_CORE = (function() {
             utils.showFloatingWarning('推演返回数据无效，请检查模型输出', true);
             return false;
         }
+
+        // ===== 字段映射：兼容模型返回的 groups/characters =====
+        if (data.groups && !data.factions) {
+            data.factions = data.groups;
+        }
+        if (data.characters && !data.character_states) {
+            data.character_states = data.characters;
+        }
+
         const s = STATE.worldState;
         let changed = false;
 
