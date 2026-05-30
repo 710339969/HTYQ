@@ -1,4 +1,4 @@
-// 设置页面渲染模块 - 新增：从ST世界书自动导入
+// 设置页面渲染模块 - 新增：从ST世界书自动导入（通过 worldInfoManager）
 window.HTYQ_UI_SETTINGS = (function() {
     const STATE = window.HTYQ_STATE;
     const utils = window.HTYQ_UTILS;
@@ -14,58 +14,70 @@ window.HTYQ_UI_SETTINGS = (function() {
             return content.trim();
         }
 
-        // ========== ST 世界书相关函数 ==========
-        // 获取当前聊天ID（复用STATE的方法）
-        function getCurrentChatId() {
-            return STATE.getCurrentChatId();
+        // ========== ST 世界书相关函数（使用 worldInfoManager） ==========
+        function getSTContext() {
+            if (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) {
+                return SillyTavern.getContext();
+            }
+            if (typeof getContext === 'function') {
+                return getContext();
+            }
+            return null;
         }
 
-        // 调用 ST API 获取世界书内容
-        async function fetchSTWorldbook(name) {
+        // 通过 worldInfoManager 获取世界书内容
+        async function fetchSTWorldbookViaManager(worldName) {
+            const ctx = getSTContext();
+            if (!ctx || !ctx.worldInfoManager) {
+                console.error('[HTYQ] worldInfoManager 不可用');
+                return null;
+            }
             try {
-                const response = await fetch('/api/worldinfo/get', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: name })
-                });
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                return await response.json();
-            } catch(err) {
-                console.error('[HTYQ] 获取ST世界书失败:', name, err);
+                // 方法1: getWorld
+                const world = await ctx.worldInfoManager.getWorld(worldName);
+                if (world && world.entries) {
+                    return world;
+                }
+                // 方法2: 某些版本需要 getWorldbook
+                if (typeof ctx.worldInfoManager.getWorldbook === 'function') {
+                    return await ctx.worldInfoManager.getWorldbook(worldName);
+                }
+                return null;
+            } catch (err) {
+                console.error('[HTYQ] 通过 worldInfoManager 获取世界书失败:', worldName, err);
                 return null;
             }
         }
 
-        // 获取当前聊天关联的世界书名称列表（尽力探测）
+        // 获取当前聊天关联的世界书名称列表（优先使用 worldInfoManager）
         async function getActiveSTWorldbookNames() {
-            // 尝试获取ST上下文
-            let ctx = null;
-            if (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) {
-                ctx = SillyTavern.getContext();
-            } else if (typeof getContext === 'function') {
-                ctx = getContext();
-            }
+            const ctx = getSTContext();
             const books = new Set();
+
             if (ctx) {
+                // 常见直接字段
                 if (ctx.selected_world_info) books.add(ctx.selected_world_info);
                 if (ctx.chatMetadata?.world) books.add(ctx.chatMetadata.world);
                 if (Array.isArray(ctx.world_names)) ctx.world_names.forEach(n => books.add(n));
-            }
-            // 如果未能检测到，尝试通过API获取所有世界书列表
-            if (books.size === 0) {
-                try {
-                    const res = await fetch('/api/worldinfo/list');
-                    if (res.ok) {
-                        const list = await res.json();
-                        if (Array.isArray(list)) {
-                            list.forEach(item => {
-                                if (item.name) books.add(item.name);
-                            });
+                
+                // 通过 worldInfoManager 获取所有可用世界书名称
+                if (ctx.worldInfoManager) {
+                    try {
+                        let allNames = [];
+                        if (typeof ctx.worldInfoManager.getWorldNames === 'function') {
+                            allNames = await ctx.worldInfoManager.getWorldNames();
+                        } else if (typeof ctx.worldInfoManager.getWorlds === 'function') {
+                            const worlds = await ctx.worldInfoManager.getWorlds();
+                            allNames = worlds.map(w => w.name || w.title);
                         }
-                    }
-                } catch(e) {}
+                        if (allNames.length) {
+                            allNames.forEach(n => books.add(n));
+                        }
+                    } catch(e) {}
+                }
             }
-            // 如果还是空，让用户手动输入
+
+            // 如果仍然为空，让用户手动输入
             if (books.size === 0) {
                 const manual = prompt('未自动检测到世界书，请输入要导入的世界书名称（可从ST世界书列表中查看）:');
                 if (manual && manual.trim()) books.add(manual.trim());
@@ -73,13 +85,14 @@ window.HTYQ_UI_SETTINGS = (function() {
             return Array.from(books);
         }
 
-        // 将ST世界书条目转换为纯文本
+        // 将ST世界书条目转换为纯文本（支持两种格式）
         function convertSTEntriesToText(entriesObj) {
             let text = '';
-            for (const id in entriesObj) {
-                const entry = entriesObj[id];
+            // entries 可能是对象或数组
+            const entries = Array.isArray(entriesObj) ? entriesObj : Object.values(entriesObj);
+            for (const entry of entries) {
                 const keys = entry.key || entry.keys || [];
-                const keyStr = keys.join(', ');
+                const keyStr = Array.isArray(keys) ? keys.join(', ') : keys;
                 const content = entry.content || '';
                 text += `### 关键词: ${keyStr}\n${content}\n\n`;
             }
@@ -88,7 +101,7 @@ window.HTYQ_UI_SETTINGS = (function() {
 
         // 导入单个ST世界书到活体引擎
         async function importSingleSTWorldbook(worldName) {
-            const lorebook = await fetchSTWorldbook(worldName);
+            const lorebook = await fetchSTWorldbookViaManager(worldName);
             if (!lorebook || !lorebook.entries) {
                 utils.showFloatingWarning(`世界书“${worldName}”无有效内容或读取失败`, true);
                 return false;
@@ -130,13 +143,12 @@ window.HTYQ_UI_SETTINGS = (function() {
                 if (ok) successCount++;
             }
             utils.showFloatingWarning(`导入完成！成功 ${successCount} / ${bookNames.length} 个世界书`, false);
-            renderWorldList(); // 刷新世界书列表
-            // 清空预览区
+            renderWorldList();
             const previewArea = document.getElementById('htyq-world-preview');
             if (previewArea) previewArea.innerHTML = '<div style="color:#94a3b8; text-align:center; font-size:12px;">点击「测试」按钮，此处将显示世界书完整内容</div>';
         }
 
-        // 渲染世界书列表（原有函数，保持原样，但需要确保它能被重新调用）
+        // 渲染世界书列表（原有函数，保持原样）
         function renderWorldList() {
             const listDiv = container.querySelector('#htyq-worlds-list');
             if (!listDiv) return;
@@ -173,7 +185,7 @@ window.HTYQ_UI_SETTINGS = (function() {
                 });
             });
 
-            // 测试按钮：在下方预览区显示完整内容
+            // 测试按钮
             listDiv.querySelectorAll('.htyq-test-world-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const idx = parseInt(btn.dataset.index);
@@ -302,7 +314,7 @@ window.HTYQ_UI_SETTINGS = (function() {
             }
         }
 
-        // ========== 事件绑定（原有 + 新增ST导入） ==========
+        // ========== 事件绑定 ==========
         // API 模式切换
         document.querySelectorAll('input[name="apiMode"]').forEach(r => r.addEventListener('change', (e) => {
             const customDiv = container.querySelector('#htyq-custom-settings');
@@ -426,7 +438,7 @@ window.HTYQ_UI_SETTINGS = (function() {
             });
         }
 
-        // ========== 世界书导入事件（原有 + 新增ST导入） ==========
+        // ========== 世界书导入事件 ==========
         // 上传文件
         const uploadBtn = container.querySelector('#htyq-upload-file');
         if (uploadBtn) {
@@ -446,7 +458,6 @@ window.HTYQ_UI_SETTINGS = (function() {
                             try {
                                 const json = JSON.parse(fileContent);
                                 if (Array.isArray(json) && json.length && (json[0].content || json[0].entry)) {
-                                    // 标准 SillyTavern 世界书：拼接所有条目
                                     worldText = json.map(entry => {
                                         const title = entry.comment || entry.name || entry.title || '条目';
                                         const content = entry.content || entry.entry || '';
@@ -492,7 +503,7 @@ window.HTYQ_UI_SETTINGS = (function() {
             });
         }
 
-        // 【新增】从ST世界书导入按钮
+        // 从ST世界书导入按钮
         const importStBtn = container.querySelector('#htyq-import-st-world');
         if (importStBtn) {
             importStBtn.addEventListener('click', async () => {
