@@ -5,18 +5,22 @@ window.HTYQ_EVOLUTION_STRATEGY = (function() {
     const api = window.HTYQ_EVOLUTION_API;
     const core = window.HTYQ_EVOLUTION_CORE;
 
-    // 字段分组定义
+    // 字段分组定义（与 prompt 模块保持一致）
     const FIELD_GROUPS = {
-        core: [  // 第一组：每轮必须推演
-            'world_time', 'world_digest', 'overall_atmosphere', 'driving_event',
-            'citizen_mood', 'security_status', 'astrology', 'direct_layer',
-            'near_layer', 'far_layer', 'upcoming_schedules', 'reputation',
-            'reputation_change', 'rumors', 'events'
-        ],
-        economy: {  // 经济组，依赖 DLC 但可单独
+        core: {  // 核心组，每轮必须推演
+            fields: [
+                'world_time', 'world_digest', 'overall_atmosphere', 'driving_event',
+                'citizen_mood', 'security_status', 'astrology', 'direct_layer',
+                'near_layer', 'far_layer', 'upcoming_schedules', 'reputation',
+                'reputation_change', 'rumors', 'events'
+            ],
+            dependsOn: null,
+            maxDelay: 0  // 0 表示每轮都推演
+        },
+        economy: {
             fields: ['economy'],
             dependsOn: 'economy',
-            maxDelay: 1  // 每轮都推演
+            maxDelay: 1
         },
         factions: {
             fields: ['factions', 'faction_relations'],
@@ -58,7 +62,7 @@ window.HTYQ_EVOLUTION_STRATEGY = (function() {
             dependsOn: 'secret_asset',
             maxDelay: 4
         },
-        extended_memos: {
+        memos: {
             fields: ['pending_foreshadowing', 'key_values_memo', 'round_focus', 'cross_region_memo', 'blood_feud_memo'],
             dependsOn: null,
             maxDelay: 4
@@ -70,9 +74,9 @@ window.HTYQ_EVOLUTION_STRATEGY = (function() {
         }
     };
 
-    // 获取当前轮需要推演的组（基于 lastUpdated 和 DLC 启用）
+    // 获取当前轮需要推演的组列表（基于 lastUpdated 和 DLC 启用）
     function getGroupsToEvolve() {
-        const enabledDlcs = STATE.globalApiSettings.enabledDlcs;
+        const enabledDlcs = STATE.globalApiSettings.enabledDlcs || {};
         const last = STATE.worldState.lastUpdated || {};
         const currentRound = STATE.worldState.round;
         const groupsToEvolve = [];
@@ -81,37 +85,38 @@ window.HTYQ_EVOLUTION_STRATEGY = (function() {
             // 检查 DLC 依赖
             if (groupConfig.dependsOn && !enabledDlcs[groupConfig.dependsOn]) continue;
             
-            const fields = groupConfig.fields || [groupConfig]; // 兼容旧格式
-            const maxDelay = groupConfig.maxDelay || 2;
-            // 计算该组中最早更新的字段的轮次
-            let lastUpdate = 0;
-            for (const field of fields) {
-                const fieldLast = last[field] || 0;
-                if (fieldLast > lastUpdate) lastUpdate = fieldLast;
+            const fields = groupConfig.fields;
+            const maxDelay = groupConfig.maxDelay;
+            // 如果 maxDelay === 0，总是推演
+            if (maxDelay === 0) {
+                groupsToEvolve.push(groupName);
+                continue;
             }
-            if (currentRound - lastUpdate >= maxDelay) {
+            // 计算该组中所有字段的最后更新轮次（取最小值，即最久未更新的）
+            let minLastRound = currentRound;
+            for (const field of fields) {
+                const fieldLast = last[field] !== undefined ? last[field] : 0;
+                if (fieldLast < minLastRound) minLastRound = fieldLast;
+            }
+            if (currentRound - minLastRound >= maxDelay) {
                 groupsToEvolve.push(groupName);
             }
         }
         return groupsToEvolve;
     }
 
-    // 根据用户设置的策略执行推演
+    // 执行一次完整推演（按用户策略）
     async function runWithStrategy(manual = false) {
         const strategy = STATE.globalApiSettings.evolutionStrategy || 'single';
         
         if (strategy === 'single') {
-            // 一次调用，全部字段（不分组，一次性问）
             await singleCallEvolution(manual);
         } else if (strategy === 'two_pass') {
-            // 两次调用：第一次核心，第二次扩展组（根据分组合并）
             await twoPassEvolution(manual);
         } else if (strategy === 'custom') {
-            // 自定义多次调用，按组顺序依次调用
             const maxSteps = STATE.globalApiSettings.customSteps || 3;
             await customStepEvolution(manual, maxSteps);
         } else {
-            // 默认降级
             await singleCallEvolution(manual);
         }
     }
@@ -123,47 +128,57 @@ window.HTYQ_EVOLUTION_STRATEGY = (function() {
 
     // 两次调用：第一次核心，第二次所有需要更新的扩展组合为一个请求
     async function twoPassEvolution(manual) {
-        const groups = getGroupsToEvolve();
-        // 第一步：核心组（总是推演）
+        // 第一步：核心组
         const corePrompt = await promptBuilder.buildCorePrompt();
-        const coreResult = await api.callRawAPI(corePrompt, "核心推演");
+        if (!corePrompt) throw new Error('构建核心 prompt 失败');
+        const coreResult = await api.callRawAPI(corePrompt, '核心推演');
         if (coreResult) {
             core.applyEvolution(coreResult);
         }
-        // 第二步：如果有需要更新的扩展组，合并成一个请求
+        // 获取需要更新的扩展组
+        let groups = getGroupsToEvolve();
+        groups = groups.filter(g => g !== 'core'); // 排除核心组
         if (groups.length > 0) {
             const extPrompt = await promptBuilder.buildExtendedPromptForGroups(groups);
-            const extResult = await api.callRawAPI(extPrompt, "扩展推演");
-            if (extResult) {
-                core.applyEvolution(extResult);
+            if (extPrompt) {
+                const extResult = await api.callRawAPI(extPrompt, '扩展推演');
+                if (extResult) {
+                    core.applyEvolution(extResult);
+                }
             }
         }
     }
 
-    // 自定义多次调用：将需要更新的组按顺序逐个调用（每次一组）
+    // 自定义多次调用：按顺序逐个组调用，最多 customSteps 次
     async function customStepEvolution(manual, maxSteps) {
         let groups = getGroupsToEvolve();
-        // 限制调用次数不超过用户设置的最大步数
+        // 确保核心组在第一个
+        const hasCore = groups.includes('core');
+        if (!hasCore) groups.unshift('core');
+        // 限制调用次数
         const steps = Math.min(groups.length, maxSteps);
-        // 核心组总是第一次
-        const corePrompt = await promptBuilder.buildCorePrompt();
-        const coreResult = await api.callRawAPI(corePrompt, "核心推演");
-        if (coreResult) {
-            core.applyEvolution(coreResult);
-        }
-        // 后续每组单独调用（如果步骤允许）
         for (let i = 0; i < steps; i++) {
             const groupName = groups[i];
-            const groupPrompt = await promptBuilder.buildPromptForGroup(groupName);
-            const groupResult = await api.callRawAPI(groupPrompt, `扩展推演:${groupName}`);
-            if (groupResult) {
-                core.applyEvolution(groupResult);
+            let promptText;
+            if (groupName === 'core') {
+                promptText = await promptBuilder.buildCorePrompt();
+            } else {
+                promptText = await promptBuilder.buildPromptForGroup(groupName);
             }
+            if (!promptText) continue;
+            const result = await api.callRawAPI(promptText, `推演组:${groupName}`);
+            if (result) {
+                core.applyEvolution(result);
+            }
+            // 可选：添加小延迟避免 API 限流
+            await new Promise(r => setTimeout(r, 500));
         }
     }
 
+    // 导出供其他模块使用（如 prompt 模块需要访问 FIELD_GROUPS）
     return {
         runWithStrategy,
-        getGroupsToEvolve  // 供 UI 调试
+        getGroupsToEvolve,
+        FIELD_GROUPS
     };
 })();
