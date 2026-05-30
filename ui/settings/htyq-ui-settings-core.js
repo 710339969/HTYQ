@@ -5,13 +5,11 @@ window.__HTYQ_UI_SETTINGS_CORE = (function() {
     const worldbook = window.__HTYQ_UI_SETTINGS_WORLDBOOK;
     const escapeHtml = utils.escapeHtml;
 
-    // 渲染整个设置页面
     async function render(container) {
         const set = STATE.globalApiSettings;
         const worldState = STATE.worldState;
         if (!worldState.manualWorlds) worldState.manualWorlds = [];
 
-        // 构建 HTML 结构
         container.innerHTML = `
             <!-- API 设置 -->
             <div class="htyq-settings-section">
@@ -73,8 +71,8 @@ window.__HTYQ_UI_SETTINGS_CORE = (function() {
                 <h3>📁 数据管理</h3>
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
                     <button id="htyq-reset-world" class="htyq-small-btn" style="background:#ef4444;">重置当前聊天世界</button>
-                    <button id="htyq-export-world" class="htyq-small-btn" style="background:#3b82f6;">导出世界状态</button>
-                    <button id="htyq-import-world" class="htyq-small-btn" style="background:#3b82f6;">导入世界状态</button>
+                    <button id="htyq-export-world" class="htyq-small-btn" style="background:#3b82f6;">导出当前世界状态</button>
+                    <button id="htyq-import-world" class="htyq-small-btn" style="background:#3b82f6;">导入当前世界状态</button>
                 </div>
             </div>
         `;
@@ -108,7 +106,6 @@ window.__HTYQ_UI_SETTINGS_CORE = (function() {
             const customDiv = container.querySelector('#htyq-custom-settings');
             if (customDiv) customDiv.style.display = e.target.value === 'custom' ? 'block' : 'none';
         }));
-        // 自动推演
         const autoPollCb = container.querySelector('#htyq-auto-poll');
         if (autoPollCb) {
             autoPollCb.addEventListener('change', (e) => {
@@ -175,33 +172,32 @@ window.__HTYQ_UI_SETTINGS_CORE = (function() {
                 utils.showFloatingWarning('DLC设置已保存', false);
             });
         }
-        // 重置世界
+        // 重置当前聊天世界
         const resetWorldBtn = container.querySelector('#htyq-reset-world');
         if (resetWorldBtn) {
             resetWorldBtn.addEventListener('click', () => {
                 if (confirm('重置当前聊天世界？这将清除所有进度，不可恢复！')) { 
-                    Object.assign(worldState, STATE.getDefaultWorldState());
-                    STATE.saveWorldState();
+                    STATE.resetCurrentWorld();
                     if (window.HTYQ_UI && window.HTYQ_UI.refresh) window.HTYQ_UI.refresh();
-                    utils.showFloatingWarning('世界已重置', false);
+                    utils.showFloatingWarning('当前聊天世界已重置', false);
                 }
             });
         }
-        // 导出
+        // 导出当前世界状态
         const exportBtn = container.querySelector('#htyq-export-world');
         if (exportBtn) {
             exportBtn.addEventListener('click', () => {
-                const dataStr = JSON.stringify(worldState, null, 2);
+                const dataStr = JSON.stringify(STATE.worldState, null, 2);
                 const blob = new Blob([dataStr], {type:'application/json'});
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `htyq_world_global.json`;
+                a.download = `htyq_world_${STATE.getCurrentChatId()}.json`;
                 a.click();
                 URL.revokeObjectURL(url);
             });
         }
-        // 导入
+        // 导入当前世界状态
         const importBtn = container.querySelector('#htyq-import-world');
         if (importBtn) {
             importBtn.addEventListener('click', () => {
@@ -214,7 +210,7 @@ window.__HTYQ_UI_SETTINGS_CORE = (function() {
                     reader.onload = (ev) => {
                         try {
                             const imported = JSON.parse(ev.target.result);
-                            Object.assign(worldState, imported);
+                            Object.assign(STATE.worldState, imported);
                             STATE.saveWorldState();
                             if (window.HTYQ_UI && window.HTYQ_UI.refresh) window.HTYQ_UI.refresh();
                             utils.showFloatingWarning('世界状态导入成功', false);
@@ -226,7 +222,7 @@ window.__HTYQ_UI_SETTINGS_CORE = (function() {
             });
         }
 
-        // ========== 世界书导入按钮事件 ==========
+        // 世界书导入按钮事件
         const autoImportBtn = container.querySelector('#htyq-auto-import-btn');
         if (autoImportBtn) {
             autoImportBtn.addEventListener('click', async () => {
@@ -235,9 +231,8 @@ window.__HTYQ_UI_SETTINGS_CORE = (function() {
                 await worldbook.autoImportActiveWorldbooks();
                 autoImportBtn.disabled = false;
                 autoImportBtn.textContent = '🚀 自动导入激活的世界书';
-                // 刷新世界书列表
                 const listContainer = container.querySelector('#htyq-worlds-list');
-                if (listContainer) worldbook.renderWorldList(listContainer, worldState, () => {});
+                if (listContainer) worldbook.renderWorldList(listContainer, STATE.worldState, () => {});
             });
         }
 
@@ -249,15 +244,14 @@ window.__HTYQ_UI_SETTINGS_CORE = (function() {
                 await worldbook.manualImportFromST();
                 manualImportBtn.disabled = false;
                 manualImportBtn.textContent = '📖 手动选择世界书';
-                // 刷新世界书列表
                 const listContainer = container.querySelector('#htyq-worlds-list');
-                if (listContainer) worldbook.renderWorldList(listContainer, worldState, () => {});
+                if (listContainer) worldbook.renderWorldList(listContainer, STATE.worldState, () => {});
             });
         }
 
         // 初始化世界书列表
         const listContainer = container.querySelector('#htyq-worlds-list');
-        if (listContainer) worldbook.renderWorldList(listContainer, worldState, () => {});
+        if (listContainer) worldbook.renderWorldList(listContainer, STATE.worldState, () => {});
     }
 
     return { render };
