@@ -73,11 +73,9 @@ window.HTYQ_EVOLUTION_CORE = (function() {
             s.factionRelations = s.factionRelations.slice(0, 30);
             changed = true;
         }
-        // 经济数据更新（适配新结构）
         if (data.economy) {
             if (typeof data.economy.currencyName === 'string') { s.economy.currencyName = data.economy.currencyName; changed = true; }
             if (typeof data.economy.currencyAmount === 'number') { 
-                // 首次设置时直接赋值，否则累加
                 if (s.economy.currencyAmount === null) s.economy.currencyAmount = data.economy.currencyAmount;
                 else s.economy.currencyAmount += data.economy.currencyAmount;
                 changed = true;
@@ -107,6 +105,15 @@ window.HTYQ_EVOLUTION_CORE = (function() {
         if (pending.length) {
             s.pendingEvents = pending;
             changed = true;
+        }
+
+        // 记录每个字段的更新轮次
+        const round = s.round;
+        if (!s.lastUpdated) s.lastUpdated = {};
+        for (let key in data) {
+            if (data[key] !== undefined && key !== 'active_contact') {
+                s.lastUpdated[key] = round;
+            }
         }
 
         if (!changed) {
