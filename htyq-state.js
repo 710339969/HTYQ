@@ -1,4 +1,4 @@
-// 状态管理模块 - 使用 ST extensionSettings 持久化，世界书列表全局存储
+// 状态管理模块 - 增加世界书来源管理
 window.HTYQ_STATE = (function() {
     const DEFAULT_DLCS = {
         world_engine: true,
@@ -14,7 +14,6 @@ window.HTYQ_STATE = (function() {
         secret_asset: true
     };
 
-    // 默认 API 设置
     const DEFAULT_API_SETTINGS = {
         apiMode: 'tavern',
         customUrl: '',
@@ -53,7 +52,7 @@ window.HTYQ_STATE = (function() {
             accidentCooldown: 0,
             noContactCounter: 0,
             breaker: 0,
-            manualWorlds: [],   // 全局世界书列表，单独存储
+            manualWorlds: [],   // 每个元素: { name, enabled, content, source }
             worldTime: '',
             overallAtmosphere: '',
             drivingEvent: '',
@@ -81,44 +80,30 @@ window.HTYQ_STATE = (function() {
         };
     }
 
-    // 全局变量
     let globalApiSettings = { ...DEFAULT_API_SETTINGS };
     let worldState = getDefaultWorldState();
 
-    // 获取 ST Context
     function getContext() {
         if (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) return SillyTavern.getContext();
         if (typeof getContext === 'function') return getContext();
         return null;
     }
 
-    // 保存全局 API 设置到 extensionSettings
     function saveGlobalSettings() {
         const ctx = getContext();
         if (ctx && ctx.extensionSettings) {
-            ctx.extensionSettings.htyq = {
-                apiSettings: globalApiSettings
-            };
-            // 尝试保存设置
-            if (typeof ctx.saveSettingsDebounced === 'function') {
-                ctx.saveSettingsDebounced();
-            } else if (typeof ctx.saveSettings === 'function') {
-                ctx.saveSettings();
-            } else {
-                // 降级到 localStorage
-                localStorage.setItem('htyq_global_settings', JSON.stringify(globalApiSettings));
-            }
+            ctx.extensionSettings.htyq = { apiSettings: globalApiSettings };
+            if (typeof ctx.saveSettingsDebounced === 'function') ctx.saveSettingsDebounced();
+            else if (typeof ctx.saveSettings === 'function') ctx.saveSettings();
+            else localStorage.setItem('htyq_global_settings', JSON.stringify(globalApiSettings));
         } else {
-            // 降级到 localStorage
             localStorage.setItem('htyq_global_settings', JSON.stringify(globalApiSettings));
         }
     }
 
-    // 加载全局 API 设置
     function loadGlobalSettings() {
         const ctx = getContext();
         let loaded = false;
-        // 优先从 extensionSettings 读取
         if (ctx && ctx.extensionSettings && ctx.extensionSettings.htyq) {
             const saved = ctx.extensionSettings.htyq.apiSettings;
             if (saved) {
@@ -126,7 +111,6 @@ window.HTYQ_STATE = (function() {
                 loaded = true;
             }
         }
-        // 如果没读到，尝试从 localStorage 读取（兼容旧版）
         if (!loaded) {
             const stored = localStorage.getItem('htyq_global_settings');
             if (stored) {
@@ -137,23 +121,15 @@ window.HTYQ_STATE = (function() {
                 } catch(e) {}
             }
         }
-        if (!loaded) {
-            globalApiSettings = { ...DEFAULT_API_SETTINGS };
-        }
-        // 确保 DLC 默认值
-        if (!globalApiSettings.enabledDlcs) {
-            globalApiSettings.enabledDlcs = { ...DEFAULT_DLCS };
-        } else {
-            globalApiSettings.enabledDlcs = { ...DEFAULT_DLCS, ...globalApiSettings.enabledDlcs };
-        }
+        if (!loaded) globalApiSettings = { ...DEFAULT_API_SETTINGS };
+        if (!globalApiSettings.enabledDlcs) globalApiSettings.enabledDlcs = { ...DEFAULT_DLCS };
+        else globalApiSettings.enabledDlcs = { ...DEFAULT_DLCS, ...globalApiSettings.enabledDlcs };
     }
 
-    // 保存世界状态（全局 localStorage）
     function saveWorldState() {
         localStorage.setItem('htyq_world_global', JSON.stringify(worldState));
     }
 
-    // 加载世界状态
     function loadWorldState() {
         const stored = localStorage.getItem('htyq_world_global');
         if (stored) {
@@ -161,10 +137,10 @@ window.HTYQ_STATE = (function() {
                 const parsed = JSON.parse(stored);
                 worldState = { ...getDefaultWorldState(), ...parsed };
                 const defaults = getDefaultWorldState();
-                for (let key in defaults) {
-                    if (worldState[key] === undefined) worldState[key] = defaults[key];
-                }
+                for (let key in defaults) if (worldState[key] === undefined) worldState[key] = defaults[key];
                 if (!worldState.manualWorlds) worldState.manualWorlds = [];
+                // 为旧数据添加 source 字段（默认为 manual）
+                worldState.manualWorlds = worldState.manualWorlds.map(w => ({ source: 'manual', ...w }));
             } catch(e) { worldState = getDefaultWorldState(); }
         } else {
             worldState = getDefaultWorldState();
@@ -188,6 +164,27 @@ window.HTYQ_STATE = (function() {
         saveWorldState();
     }
 
+    // 新增：按来源删除世界书
+    function clearWorldsBySource(sources) {
+        const before = worldState.manualWorlds.length;
+        worldState.manualWorlds = worldState.manualWorlds.filter(w => !sources.includes(w.source));
+        if (before !== worldState.manualWorlds.length) saveWorldState();
+        return before - worldState.manualWorlds.length;
+    }
+
+    // 新增：添加带来源的世界书
+    function addWorldbookWithSource(name, content, source = 'manual', enabled = true) {
+        const existing = worldState.manualWorlds.find(w => w.name === name);
+        if (existing) {
+            existing.content = content;
+            existing.enabled = enabled;
+            existing.source = source;
+        } else {
+            worldState.manualWorlds.push({ name, enabled, content, source });
+        }
+        saveWorldState();
+    }
+
     return {
         DEFAULT_DLCS,
         getDefaultWorldState,
@@ -198,6 +195,8 @@ window.HTYQ_STATE = (function() {
         loadWorldState,
         saveGlobalSettings,
         loadGlobalSettings,
-        addChronicle
+        addChronicle,
+        clearWorldsBySource,
+        addWorldbookWithSource
     };
 })();
