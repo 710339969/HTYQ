@@ -1,4 +1,4 @@
-// 设置页面渲染模块 - 完整版（仅ST导入，支持整本/条目选择，修复持久化）
+// 设置页面渲染模块 - 完整版（包含API、引擎、DLC、数据管理 + 仅ST世界书导入）
 window.HTYQ_UI_SETTINGS = (function() {
     const STATE = window.HTYQ_STATE;
     const utils = window.HTYQ_UTILS;
