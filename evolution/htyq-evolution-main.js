@@ -1,9 +1,27 @@
-// 演化主控：runEvolution, start, 事件绑定 + 自动同步世界书
+// 演化主控 - 动态等待策略模块
 window.HTYQ_EVOLUTION = (function() {
     const STATE = window.HTYQ_STATE;
     const utils = window.HTYQ_UTILS;
     const api = window.HTYQ_EVOLUTION_API;
-    const strategy = window.HTYQ_EVOLUTION_STRATEGY;
+
+    async function ensureStrategy() {
+        if (!window.HTYQ_EVOLUTION_STRATEGY) {
+            console.log('[HTYQ] 等待策略模块加载...');
+            await new Promise(resolve => {
+                const check = setInterval(() => {
+                    if (window.HTYQ_EVOLUTION_STRATEGY) {
+                        clearInterval(check);
+                        resolve();
+                    }
+                }, 100);
+                setTimeout(() => { clearInterval(check); resolve(); }, 5000);
+            });
+        }
+        if (!window.HTYQ_EVOLUTION_STRATEGY) {
+            throw new Error('策略模块加载失败');
+        }
+        return window.HTYQ_EVOLUTION_STRATEGY;
+    }
 
     let isEvolving = false;
     let hasFirstResponse = false;
@@ -20,6 +38,7 @@ window.HTYQ_EVOLUTION = (function() {
         isEvolving = true;
         api.showPersistentToast('🌍 世界演化中...', false);
         try {
+            const strategy = await ensureStrategy();
             await strategy.runWithStrategy(manual);
         } catch (err) {
             console.error('推演彻底失败:', err);
