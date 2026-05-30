@@ -14,10 +14,15 @@ window.HTYQ_EVOLUTION_API = (function() {
     let currentRetry = 0;
     let floatingToast = null;
 
+    // 修复：使用固定 ID 确保能正确移除
     function showPersistentToast(text, isError = false, duration = null) {
-        if (floatingToast && floatingToast.parentNode) floatingToast.remove();
-        floatingToast = document.createElement('div');
-        floatingToast.style.cssText = `
+        // 先移除已存在的 toast
+        const existing = document.getElementById('htyq-persistent-toast');
+        if (existing) existing.remove();
+        
+        const toast = document.createElement('div');
+        toast.id = 'htyq-persistent-toast';
+        toast.style.cssText = `
             position: fixed;
             top: 20px;
             right: 20px;
@@ -34,14 +39,21 @@ window.HTYQ_EVOLUTION_API = (function() {
             max-width: 350px;
             text-align: center;
         `;
-        floatingToast.innerHTML = text + '<br><small style="font-size:10px;">点击关闭</small>';
-        floatingToast.onclick = () => floatingToast.remove();
-        document.body.appendChild(floatingToast);
-        if (duration) setTimeout(() => { if (floatingToast && floatingToast.parentNode) floatingToast.remove(); }, duration);
+        toast.innerHTML = text + '<br><small style="font-size:10px;">点击关闭</small>';
+        toast.onclick = () => toast.remove();
+        document.body.appendChild(toast);
+        floatingToast = toast;
+        if (duration) {
+            setTimeout(() => {
+                if (toast && toast.parentNode) toast.remove();
+                if (floatingToast === toast) floatingToast = null;
+            }, duration);
+        }
     }
 
     function hidePersistentToast() {
-        if (floatingToast && floatingToast.parentNode) floatingToast.remove();
+        const toast = document.getElementById('htyq-persistent-toast');
+        if (toast && toast.parentNode) toast.remove();
         floatingToast = null;
     }
 
