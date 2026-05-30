@@ -80,6 +80,11 @@ window.HTYQ_EVOLUTION_STRATEGY = (function() {
         const coreResult = await api.callRawAPI(corePrompt, '核心推演');
         if (coreResult) core.applyEvolution(coreResult);
 
+        // ★ 关键修复：先增加轮次，再调用扩展组
+        STATE.worldState.round++;
+        STATE.saveWorldState();
+        if (window.HTYQ_UI && window.HTYQ_UI.refresh) window.HTYQ_UI.refresh();
+
         let groups = getGroupsToEvolve();
         groups = groups.filter(g => g !== 'core');
         if (groups.length > 0) {
@@ -114,6 +119,11 @@ window.HTYQ_EVOLUTION_STRATEGY = (function() {
             if (result) core.applyEvolution(result);
             await new Promise(r => setTimeout(r, 500));
         }
+
+        // 增加世界轮次
+        STATE.worldState.round++;
+        STATE.saveWorldState();
+        if (window.HTYQ_UI && window.HTYQ_UI.refresh) window.HTYQ_UI.refresh();
     }
 
     async function runWithStrategy(manual = false) {
