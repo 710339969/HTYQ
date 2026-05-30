@@ -7,7 +7,7 @@ window.HTYQ_EVOLUTION_STRATEGY = (function() {
 
     // 字段分组定义（与 prompt 模块保持一致）
     const FIELD_GROUPS = {
-        core: {  // 核心组，每轮必须推演
+        core: {
             fields: [
                 'world_time', 'world_digest', 'overall_atmosphere', 'driving_event',
                 'citizen_mood', 'security_status', 'astrology', 'direct_layer',
@@ -137,7 +137,7 @@ window.HTYQ_EVOLUTION_STRATEGY = (function() {
         }
         // 获取需要更新的扩展组
         let groups = getGroupsToEvolve();
-        groups = groups.filter(g => g !== 'core'); // 排除核心组
+        groups = groups.filter(g => g !== 'core');
         if (groups.length > 0) {
             const extPrompt = await promptBuilder.buildExtendedPromptForGroups(groups);
             if (extPrompt) {
@@ -175,7 +175,7 @@ window.HTYQ_EVOLUTION_STRATEGY = (function() {
         }
     }
 
-    // 导出供其他模块使用（如 prompt 模块需要访问 FIELD_GROUPS）
+    // 导出供其他模块使用
     return {
         runWithStrategy,
         getGroupsToEvolve,
