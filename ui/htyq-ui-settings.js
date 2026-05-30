@@ -1,4 +1,4 @@
-// 设置页面渲染模块 - 从ST世界书导入（支持整本导入和条目级导入）
+// 设置页面渲染模块 - 完整版（仅ST导入，支持整本/条目选择，修复持久化）
 window.HTYQ_UI_SETTINGS = (function() {
     const STATE = window.HTYQ_STATE;
     const utils = window.HTYQ_UTILS;
@@ -33,7 +33,6 @@ window.HTYQ_UI_SETTINGS = (function() {
                 const ctx = SillyTavern.getContext();
                 const data = await ctx.loadWorldInfo(worldName);
                 if (!data || !data.entries) return null;
-                // 过滤禁用的条目
                 const entries = Object.values(data.entries).filter(e => !e.disable);
                 return { name: worldName, entries };
             } catch(e) {
@@ -42,7 +41,6 @@ window.HTYQ_UI_SETTINGS = (function() {
             }
         }
 
-        // 将条目数组转换为纯文本（用于活体引擎世界书内容）
         function entriesToText(entries) {
             let text = '';
             for (const entry of entries) {
@@ -53,11 +51,9 @@ window.HTYQ_UI_SETTINGS = (function() {
             return text.trim();
         }
 
-        // 导入到活体引擎（内部函数）
-        async function importToHtyq(worldName, content, isOverwrite = true) {
+        async function importToHtyq(worldName, content) {
             const existing = worldState.manualWorlds.find(w => w.name === worldName);
             if (existing) {
-                if (!isOverwrite) return false;
                 if (!confirm(`世界书“${worldName}”已存在，是否覆盖？`)) return false;
                 existing.content = content;
                 existing.enabled = true;
@@ -66,36 +62,25 @@ window.HTYQ_UI_SETTINGS = (function() {
             }
             STATE.saveWorldState();
             utils.showFloatingWarning(`成功导入世界书“${worldName}”`, false);
-            renderWorldList(); // 刷新列表
+            renderWorldList();
             return true;
         }
 
-        // 导入整本世界书
         async function importWholeWorldbook(worldName) {
             const data = await loadWorldbookContent(worldName);
             if (!data || !data.entries.length) {
                 utils.showFloatingWarning(`世界书“${worldName}”无有效内容`, true);
                 return;
             }
-            const textContent = entriesToText(data.entries);
-            await importToHtyq(worldName, textContent);
+            await importToHtyq(worldName, entriesToText(data.entries));
         }
 
-        // 显示条目选择对话框（多选），返回选中的条目数组
         function showEntrySelectionDialog(worldName, entries) {
             return new Promise((resolve) => {
                 const overlay = document.createElement('div');
-                overlay.style.cssText = `
-                    position: fixed; top:0; left:0; width:100%; height:100%;
-                    background:rgba(0,0,0,0.85); z-index:10006;
-                    display:flex; align-items:center; justify-content:center;
-                `;
+                overlay.style.cssText = `position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:10006; display:flex; align-items:center; justify-content:center;`;
                 const dialog = document.createElement('div');
-                dialog.style.cssText = `
-                    background:#1e2937; border-radius:12px; padding:20px;
-                    width:500px; max-width:90%; max-height:80%; overflow:auto;
-                    border:1px solid #334155; display:flex; flex-direction:column;
-                `;
+                dialog.style.cssText = `background:#1e2937; border-radius:12px; padding:20px; width:500px; max-width:90%; max-height:80%; overflow:auto; border:1px solid #334155; display:flex; flex-direction:column;`;
                 dialog.innerHTML = `
                     <h3 style="margin:0 0 8px 0; font-size:16px; color:#c084fc;">📖 ${escapeHtml(worldName)} - 选择条目</h3>
                     <div style="margin-bottom:12px; font-size:12px; color:#94a3b8;">共 ${entries.length} 个条目，可多选</div>
@@ -118,17 +103,11 @@ window.HTYQ_UI_SETTINGS = (function() {
                 `;
                 overlay.appendChild(dialog);
                 document.body.appendChild(overlay);
-
                 const entriesList = dialog.querySelector('#htyq-entries-list');
                 const selectAllBtn = dialog.querySelector('#htyq-select-all-btn');
                 const cancelBtn = dialog.querySelector('#htyq-cancel-btn');
                 const importBtn = dialog.querySelector('#htyq-import-btn');
-
-                const close = (selectedEntries) => {
-                    overlay.remove();
-                    resolve(selectedEntries);
-                };
-
+                const close = (selected) => { overlay.remove(); resolve(selected); };
                 selectAllBtn.onclick = () => {
                     const cbs = entriesList.querySelectorAll('.htyq-entry-cb');
                     const allChecked = Array.from(cbs).every(cb => cb.checked);
@@ -139,36 +118,24 @@ window.HTYQ_UI_SETTINGS = (function() {
                 importBtn.onclick = () => {
                     const selected = Array.from(entriesList.querySelectorAll('.htyq-entry-cb:checked'))
                         .map(cb => entries[parseInt(cb.dataset.idx)]);
-                    if (selected.length === 0) {
-                        utils.showFloatingWarning('请至少选择一个条目', true);
-                        return;
-                    }
+                    if (selected.length === 0) { utils.showFloatingWarning('请至少选择一个条目', true); return; }
                     close(selected);
                 };
                 overlay.onclick = (e) => { if (e.target === overlay) close(null); };
             });
         }
 
-        // 从ST世界书导入（主入口：先选世界书，再选操作）
         async function importFromST() {
             const allNames = await getWorldbookNames();
             if (!allNames.length) {
                 utils.showFloatingWarning('未找到任何世界书，请先在 ST 中创建世界书', true);
                 return;
             }
-            // 弹出世界书选择对话框（单选，因为之后可以选条目）
             const selectedWorld = await new Promise((resolve) => {
                 const overlay = document.createElement('div');
-                overlay.style.cssText = `
-                    position: fixed; top:0; left:0; width:100%; height:100%;
-                    background:rgba(0,0,0,0.6); z-index:10005;
-                    display:flex; align-items:center; justify-content:center;
-                `;
+                overlay.style.cssText = `position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:10005; display:flex; align-items:center; justify-content:center;`;
                 const dialog = document.createElement('div');
-                dialog.style.cssText = `
-                    background:#1e2937; border-radius:12px; padding:20px;
-                    width:320px; max-width:90%; border:1px solid #334155;
-                `;
+                dialog.style.cssText = `background:#1e2937; border-radius:12px; padding:20px; width:320px; max-width:90%; border:1px solid #334155;`;
                 dialog.innerHTML = `
                     <h3 style="margin:0 0 12px 0; font-size:16px; color:#c084fc;">📖 选择世界书</h3>
                     <select id="htyq-world-select" style="width:100%; background:#0f172a; color:#e2e8f0; border:1px solid #334155; border-radius:6px; padding:8px;">
@@ -202,7 +169,6 @@ window.HTYQ_UI_SETTINGS = (function() {
                 overlay.onclick = (e) => { if (e.target === overlay) close(null); };
             });
             if (!selectedWorld) return;
-
             if (selectedWorld.type === 'whole') {
                 await importWholeWorldbook(selectedWorld.name);
             } else {
@@ -213,9 +179,8 @@ window.HTYQ_UI_SETTINGS = (function() {
                 }
                 const selectedEntries = await showEntrySelectionDialog(selectedWorld.name, data.entries);
                 if (!selectedEntries || selectedEntries.length === 0) return;
-                const textContent = entriesToText(selectedEntries);
                 const customName = `${selectedWorld.name} (选中条目 ${selectedEntries.length})`;
-                await importToHtyq(customName, textContent);
+                await importToHtyq(customName, entriesToText(selectedEntries));
             }
         }
 
@@ -244,7 +209,6 @@ window.HTYQ_UI_SETTINGS = (function() {
                 </div>
             `).join('');
 
-            // 启用/禁用
             listDiv.querySelectorAll('.htyq-world-enable').forEach(cb => {
                 cb.addEventListener('change', (e) => {
                     const idx = parseInt(cb.dataset.index);
@@ -256,7 +220,6 @@ window.HTYQ_UI_SETTINGS = (function() {
                 });
             });
 
-            // 测试按钮
             listDiv.querySelectorAll('.htyq-test-world-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const idx = parseInt(btn.dataset.index);
@@ -277,7 +240,6 @@ window.HTYQ_UI_SETTINGS = (function() {
                 });
             });
 
-            // 删除世界书
             listDiv.querySelectorAll('.htyq-del-world-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const idx = parseInt(btn.dataset.index);
@@ -294,7 +256,7 @@ window.HTYQ_UI_SETTINGS = (function() {
             });
         }
 
-        // ========== 构建UI（仅保留ST导入） ==========
+        // ========== 构建UI ==========
         container.innerHTML = `
             <!-- API 设置 -->
             <div class="htyq-settings-section">
@@ -322,7 +284,7 @@ window.HTYQ_UI_SETTINGS = (function() {
                 <button id="htyq-save-engine" class="htyq-small-btn">保存引擎设置</button>
             </div>
 
-            <!-- 世界书导入管理器（仅ST自动导入） -->
+            <!-- 世界书导入管理器 -->
             <div class="htyq-settings-section">
                 <h3>📚 世界书导入管理器</h3>
                 <div style="margin-bottom:12px;">
@@ -382,12 +344,131 @@ window.HTYQ_UI_SETTINGS = (function() {
             }
         }
 
-        // ========== 事件绑定（保留原有API/引擎/DLC/数据管理事件，省略重复代码） ==========
-        // ... (为了简洁，此处省略与之前完全相同的事件绑定代码，实际使用时请保留完整)
-        // 注意：此处应完整复制之前的事件绑定（API模式切换、模型列表、保存设置等），
-        // 但为了回答清晰，我将它们整合到下面的实际完整代码中。您只需要替换整个文件即可。
+        // ========== 事件绑定 ==========
+        // API 模式切换
+        document.querySelectorAll('input[name="apiMode"]').forEach(r => r.addEventListener('change', (e) => {
+            const customDiv = container.querySelector('#htyq-custom-settings');
+            if (customDiv) customDiv.style.display = e.target.value === 'custom' ? 'block' : 'none';
+        }));
+        // 自动推演
+        const autoPollCb = container.querySelector('#htyq-auto-poll');
+        if (autoPollCb) {
+            autoPollCb.addEventListener('change', (e) => {
+                const intervalGroup = container.querySelector('#htyq-poll-interval-group');
+                if (intervalGroup) intervalGroup.style.display = e.target.checked ? 'block' : 'none';
+            });
+        }
+        // 获取模型列表
+        const fetchModelsBtn = container.querySelector('#htyq-fetch-models');
+        if (fetchModelsBtn) {
+            fetchModelsBtn.addEventListener('click', async () => {
+                const url = container.querySelector('#htyq-custom-url')?.value.trim();
+                const key = container.querySelector('#htyq-custom-key')?.value.trim();
+                if (!url) { utils.showFloatingWarning('请填写API URL', true); return; }
+                const fetchUrl = url.replace(/\/$/, '') + (url.endsWith('/v1') ? '/models' : '/v1/models');
+                try {
+                    const resp = await fetch(fetchUrl, { headers: { 'Authorization': `Bearer ${key}` } });
+                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                    const data = await resp.json();
+                    if (data.data && Array.isArray(data.data)) {
+                        const select = container.querySelector('#htyq-model-list');
+                        select.innerHTML = '<option value="">-- 选择模型 --</option>';
+                        data.data.forEach(m => { const opt = document.createElement('option'); opt.value = m.id; opt.textContent = m.id; select.appendChild(opt); });
+                        select.style.display = 'block';
+                        select.onchange = () => { const modelInput = container.querySelector('#htyq-custom-model'); if (modelInput) modelInput.value = select.value; };
+                        utils.showFloatingWarning(`获取到 ${data.data.length} 个模型`, false);
+                    } else utils.showFloatingWarning('无法解析模型列表', true);
+                } catch(e) { utils.showFloatingWarning('获取模型失败: ' + e.message, true); }
+            });
+        }
+        // 保存API设置
+        const saveApiBtn = container.querySelector('#htyq-save-api');
+        if (saveApiBtn) {
+            saveApiBtn.addEventListener('click', () => {
+                const selected = container.querySelector('input[name="apiMode"]:checked');
+                if (selected) STATE.globalApiSettings.apiMode = selected.value;
+                STATE.globalApiSettings.customUrl = container.querySelector('#htyq-custom-url')?.value || '';
+                STATE.globalApiSettings.customKey = container.querySelector('#htyq-custom-key')?.value || '';
+                STATE.globalApiSettings.customModel = container.querySelector('#htyq-custom-model')?.value || '';
+                STATE.saveGlobalSettings();
+                utils.showFloatingWarning('API设置已保存', false);
+            });
+        }
+        // 保存引擎设置
+        const saveEngineBtn = container.querySelector('#htyq-save-engine');
+        if (saveEngineBtn) {
+            saveEngineBtn.addEventListener('click', () => {
+                STATE.globalApiSettings.autoInject = container.querySelector('#htyq-auto-inject')?.checked || false;
+                STATE.globalApiSettings.autoPollMode = container.querySelector('#htyq-auto-poll')?.checked ? 'auto' : 'manual';
+                const interval = container.querySelector('#htyq-poll-interval');
+                if (interval) STATE.globalApiSettings.autoPollInterval = parseInt(interval.value) || 1;
+                STATE.saveGlobalSettings();
+                utils.showFloatingWarning('引擎设置已保存', false);
+            });
+        }
+        // 保存 DLC
+        const saveDlcsBtn = container.querySelector('#htyq-save-dlcs');
+        if (saveDlcsBtn) {
+            saveDlcsBtn.addEventListener('click', () => {
+                document.querySelectorAll('#htyq-dlcs-container input[type="checkbox"]').forEach(cb => {
+                    STATE.globalApiSettings.enabledDlcs[cb.dataset.dlc] = cb.checked;
+                });
+                STATE.saveGlobalSettings();
+                utils.showFloatingWarning('DLC设置已保存', false);
+            });
+        }
+        // 重置世界
+        const resetWorldBtn = container.querySelector('#htyq-reset-world');
+        if (resetWorldBtn) {
+            resetWorldBtn.addEventListener('click', () => {
+                if (confirm('重置当前聊天世界？这将清除所有进度，不可恢复！')) { 
+                    STATE.worldState = STATE.getDefaultWorldState(); 
+                    STATE.saveWorldState(); 
+                    if (window.HTYQ_UI && window.HTYQ_UI.refresh) window.HTYQ_UI.refresh(); 
+                    utils.showFloatingWarning('世界已重置', false); 
+                }
+            });
+        }
+        // 导出
+        const exportBtn = container.querySelector('#htyq-export-world');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', () => {
+                const dataStr = JSON.stringify(STATE.worldState, null, 2);
+                const blob = new Blob([dataStr], {type:'application/json'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `htyq_world_${STATE.getCurrentChatId()}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        }
+        // 导入
+        const importBtn = container.querySelector('#htyq-import-world');
+        if (importBtn) {
+            importBtn.addEventListener('click', () => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'application/json';
+                input.onchange = (e) => {
+                    const file = e.target.files[0];
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                        try {
+                            const imported = JSON.parse(ev.target.result);
+                            STATE.worldState = { ...STATE.worldState, ...imported };
+                            STATE.saveWorldState();
+                            if (window.HTYQ_UI && window.HTYQ_UI.refresh) window.HTYQ_UI.refresh();
+                            utils.showFloatingWarning('世界状态导入成功', false);
+                        } catch(err) { utils.showFloatingWarning('导入失败：无效的JSON', true); }
+                    };
+                    reader.readAsText(file);
+                };
+                input.click();
+            });
+        }
 
-        // 由于回答长度限制，我会在最后提供完整的文件替换代码。这里先给出核心的新增事件：
+        // ========== ST 导入按钮 ==========
         const importStBtn = container.querySelector('#htyq-import-st-world');
         if (importStBtn) {
             importStBtn.addEventListener('click', async () => {
